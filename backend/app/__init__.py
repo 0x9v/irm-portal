@@ -1,0 +1,1 @@
+"""IRM Platform backend application."""
