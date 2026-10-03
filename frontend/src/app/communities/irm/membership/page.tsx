@@ -12,13 +12,14 @@ export default function MembershipPage() {
   const [loading, setLoading] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: "error" | "success" | "info" } | null>(null);
 
   const handleCancelRequest = async () => {
     if (!membership?.id) return;
     setCanceling(true);
     setMessage(null);
     try {
-      await fetchApi(`/api/v1/communities/irm/membership/${membership.id}`, {
+      await fetchApi<void>(`/api/v1/communities/irm/membership/${membership.id}`, {
         method: "DELETE",
       });
       setMessage({ text: "Pending membership request canceled successfully. You may apply again.", type: "success" });
@@ -45,7 +46,6 @@ export default function MembershipPage() {
       setConfirmCancel(false);
     }
   };
-  const [message, setMessage] = useState<{ text: string; type: "error" | "success" | "info" } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

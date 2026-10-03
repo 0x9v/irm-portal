@@ -69,8 +69,7 @@ export default function AnnouncementsPage() {
       setTitle("");
       setContent("");
       // Refresh list
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAnnouncements();
+      loadAnnouncements();
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 403) {

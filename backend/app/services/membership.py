@@ -155,11 +155,11 @@ def _review_membership(db: Session, community_slug: str, membership_id: str, new
     if not community:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
 
-    # Re-read membership after acquiring lock
+    # Re-read membership after acquiring lock, bypassing identity-map cache
     membership = db.query(Membership).filter(
         Membership.id == m_id,
         Membership.community_id == community.id
-    ).first()
+    ).populate_existing().with_for_update().first()
 
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
@@ -362,12 +362,12 @@ def withdraw_membership_request(
             detail="Community not found"
         )
 
-    # Read and lock the specific membership
+    # Read and lock the specific membership, bypassing identity-map cache
     membership = db.query(Membership).filter(
         Membership.id == m_uuid,
         Membership.community_id == community.id,
         Membership.user_id == user.id
-    ).with_for_update().first()
+    ).populate_existing().with_for_update().first()
     
     if not membership:
         raise HTTPException(

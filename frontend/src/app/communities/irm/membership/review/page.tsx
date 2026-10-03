@@ -56,6 +56,7 @@ export default function MembershipReviewPage() {
   useEffect(() => {
     // Only fetch if definitely authorized locally to avoid redundant 403s
     if (membership && membership.status === "ACTIVE" && membership.role === "DELEGATE") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchQueue();
     }
   }, [membership, fetchQueue]);
@@ -63,6 +64,7 @@ export default function MembershipReviewPage() {
   // Clear data on unmount or auth loss
   useEffect(() => {
     if (!user || (membership && (membership.status !== "ACTIVE" || membership.role !== "DELEGATE"))) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQueue([]);
       setConfirmation(null);
       setError(null);
