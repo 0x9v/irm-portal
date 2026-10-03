@@ -1,3 +1,4 @@
+import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -335,3 +336,63 @@ def get_pending_memberships(db: Session, community_slug: str, skip: int = 0, lim
             )
         )
     return results
+
+
+def withdraw_membership_request(
+    db: Session,
+    community_slug: str,
+    membership_id: str,
+    user: User
+) -> None:
+    try:
+        m_uuid = uuid.UUID(membership_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Membership not found"
+        )
+        
+    # Lock user row to serialize operations
+    db.query(User).filter(User.id == user.id).with_for_update().first()
+    
+    community = db.query(Community).filter(Community.slug == community_slug).first()
+    if not community:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Community not found"
+        )
+
+    # Read and lock the specific membership
+    membership = db.query(Membership).filter(
+        Membership.id == m_uuid,
+        Membership.community_id == community.id,
+        Membership.user_id == user.id
+    ).with_for_update().first()
+    
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Membership not found"
+        )
+        
+    if membership.status == MembershipStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Membership is already active."
+        )
+        
+    if membership.status == MembershipStatus.REJECTED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Membership is already rejected."
+        )
+        
+    try:
+        db.delete(membership)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to withdraw membership request."
+        )

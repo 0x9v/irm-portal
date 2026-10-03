@@ -10,6 +10,41 @@ export default function MembershipPage() {
   
   const [cne, setCne] = useState("");
   const [loading, setLoading] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  const handleCancelRequest = async () => {
+    if (!membership?.id) return;
+    setCanceling(true);
+    setMessage(null);
+    try {
+      await fetchApi(`/api/v1/communities/irm/membership/${membership.id}`, {
+        method: "DELETE",
+      });
+      setMessage({ text: "Pending membership request canceled successfully. You may apply again.", type: "success" });
+      await refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setMessage({ text: "Unauthorized. Please log in first.", type: "error" });
+          await refresh();
+        } else if (err.status === 404) {
+          setMessage({ text: "Application is no longer available.", type: "error" });
+          await refresh();
+        } else if (err.status === 409) {
+          setMessage({ text: "Application is no longer a pending request.", type: "error" });
+          await refresh();
+        } else {
+          setMessage({ text: "Completion could not be confirmed. Please refresh before retrying.", type: "error" });
+        }
+      } else {
+        setMessage({ text: "A network error occurred. Please refresh before retrying.", type: "error" });
+      }
+    } finally {
+      setCanceling(false);
+      setConfirmCancel(false);
+    }
+  };
   const [message, setMessage] = useState<{ text: string; type: "error" | "success" | "info" } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,6 +88,18 @@ export default function MembershipPage() {
     <div className="p-8 font-sans max-w-2xl mx-auto mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
       <h1 className="text-2xl font-bold mb-6">IRM Membership</h1>
 
+      {message && (
+        <div 
+          className={`mb-6 p-4 rounded border ${
+            message.type === "success" ? "bg-green-50 text-green-700 border-green-200" : 
+            message.type === "error" ? "bg-red-50 text-red-700 border-red-200" :
+            "bg-blue-50 text-blue-700 border-blue-200"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
       {!user ? (
         <div className="text-gray-600">
           Please <Link href="/login" className="text-blue-600 hover:underline">log in</Link> to view or request membership.
@@ -69,6 +116,42 @@ export default function MembershipPage() {
               </Link>
             </div>
           )}
+          
+          {membership.status === "PENDING" && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              {!confirmCancel ? (
+                <button 
+                  onClick={() => setConfirmCancel(true)}
+                  disabled={canceling}
+                  className="text-red-600 hover:underline font-medium disabled:opacity-50"
+                >
+                  Cancel pending request
+                </button>
+              ) : (
+                <div className="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-3">
+                  <p className="text-sm text-red-800">
+                    Are you sure? Canceling will withdraw this request. You may apply again later.
+                  </p>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleCancelRequest}
+                      disabled={canceling}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50"
+                    >
+                      {canceling ? "Canceling..." : "Confirm Cancellation"}
+                    </button>
+                    <button 
+                      onClick={() => setConfirmCancel(false)}
+                      disabled={canceling}
+                      className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50"
+                    >
+                      Keep Application
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div>
@@ -78,17 +161,7 @@ export default function MembershipPage() {
             </div>
           )}
 
-          {message && (
-            <div 
-              className={`mb-6 p-4 rounded border ${
-                message.type === "success" ? "bg-green-50 text-green-700 border-green-200" : 
-                message.type === "error" ? "bg-red-50 text-red-700 border-red-200" :
-                "bg-blue-50 text-blue-700 border-blue-200"
-              }`}
-            >
-              {message.text}
-            </div>
-          )}
+
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

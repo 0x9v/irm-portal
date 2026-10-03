@@ -166,7 +166,29 @@ def api_reject_membership(
     """
     return reject_membership(db, community_slug, membership_id)
 
+
+from app.services.membership import withdraw_membership_request
+
+@router.delete(
+    "/{community_slug}/membership/{membership_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Withdraw a pending membership request",
+)
+def api_withdraw_membership(
+    community_slug: str,
+    membership_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Withdraw the caller's own pending membership request.
+    """
+    withdraw_membership_request(db, community_slug, membership_id, current_user)
+    # The return value for 204 must be empty
+    return None
+
 from app.schemas.community_settings import DocumentVotingSettingsUpdate, DocumentVotingSettingsResponse
+
 from app.models.community import Community
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse

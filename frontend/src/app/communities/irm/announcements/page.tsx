@@ -50,6 +50,7 @@ export default function AnnouncementsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAnnouncements();
   }, []);
 
@@ -68,6 +69,7 @@ export default function AnnouncementsPage() {
       setTitle("");
       setContent("");
       // Refresh list
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAnnouncements();
     } catch (err) {
       if (err instanceof ApiError) {
