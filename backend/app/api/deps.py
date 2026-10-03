@@ -90,6 +90,20 @@ def require_community_delegate(
 
 from app.models.membership_permission import PermissionType, MembershipPermission
 
+
+def has_community_permission(db: Session, membership: Membership, required_permission: PermissionType) -> bool:
+    if membership.status != MembershipStatus.ACTIVE:
+        return False
+    if membership.role == MembershipRole.DELEGATE:
+        return True
+    if membership.role == MembershipRole.MODERATOR:
+        grant = db.query(MembershipPermission).filter(
+            MembershipPermission.membership_id == membership.id,
+            MembershipPermission.permission == required_permission
+        ).first()
+        return bool(grant)
+    return False
+
 def require_community_permission(required_permission: PermissionType):
     """
     Factory that returns a dependency ensuring the caller is either a DELEGATE
@@ -99,18 +113,12 @@ def require_community_permission(required_permission: PermissionType):
         membership: Membership = Depends(get_current_active_membership),
         db: Session = Depends(get_db)
     ) -> Membership:
-        if membership.role == MembershipRole.DELEGATE:
+        if has_community_permission(db, membership, required_permission):
             return membership
-        elif membership.role == MembershipRole.MODERATOR:
-            grant = db.query(MembershipPermission).filter(
-                MembershipPermission.membership_id == membership.id,
-                MembershipPermission.permission == required_permission
-            ).first()
-            if grant:
-                return membership
         
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to perform this action."
         )
     return permission_dependency
+

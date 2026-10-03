@@ -1,0 +1,115 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { fetchApi, ApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+
+export default function MembershipPage() {
+  const { user, membership, isLoading: authLoading, refresh } = useAuth();
+  
+  const [cne, setCne] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: "error" | "success" | "info" } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      await fetchApi("/api/v1/communities/irm/membership", {
+        method: "POST",
+        body: JSON.stringify({ cne }),
+      });
+      setMessage({ text: "Membership request submitted successfully.", type: "success" });
+      await refresh();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setMessage({ text: `Current state: ${err.message}`, type: "info" });
+        } else if (err.status === 401) {
+          setMessage({ text: "Unauthorized. Please log in first.", type: "error" });
+        } else if (err.status === 422) {
+          setMessage({ text: `Validation error: ${err.message}`, type: "error" });
+        } else {
+          setMessage({ text: `Error: ${err.message}`, type: "error" });
+        }
+      } else if (err instanceof Error) {
+        setMessage({ text: err.message, type: "error" });
+      } else {
+        setMessage({ text: "An unexpected error occurred.", type: "error" });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (authLoading) {
+    return <div className="p-8 font-sans max-w-2xl mx-auto mt-10">Loading...</div>;
+  }
+
+  return (
+    <div className="p-8 font-sans max-w-2xl mx-auto mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
+      <h1 className="text-2xl font-bold mb-6">IRM Membership</h1>
+
+      {!user ? (
+        <div className="text-gray-600">
+          Please <Link href="/login" className="text-blue-600 hover:underline">log in</Link> to view or request membership.
+        </div>
+      ) : membership && (membership.status === "ACTIVE" || membership.status === "PENDING") ? (
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded">
+          <h2 className="font-semibold text-lg mb-2">Current Membership</h2>
+          <p>Status: <span className="font-medium text-gray-800">{membership.status}</span></p>
+          <p>Role: <span className="font-medium text-gray-800">{membership.role}</span></p>
+        </div>
+      ) : (
+        <div>
+          {membership?.status === "REJECTED" && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded">
+              Your previous membership request was REJECTED. You may reapply below.
+            </div>
+          )}
+
+          {message && (
+            <div 
+              className={`mb-6 p-4 rounded border ${
+                message.type === "success" ? "bg-green-50 text-green-700 border-green-200" : 
+                message.type === "error" ? "bg-red-50 text-red-700 border-red-200" :
+                "bg-blue-50 text-blue-700 border-blue-200"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="cne">
+                CNE
+              </label>
+              <input
+                id="cne"
+                name="cne"
+                type="text"
+                required
+                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={cne}
+                onChange={(e) => setCne(e.target.value)}
+                placeholder="Enter your CNE"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? "Submitting..." : (membership?.status === "REJECTED" ? "Reapply for membership" : "Request membership")}
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}

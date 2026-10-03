@@ -33,6 +33,73 @@ def request_membership(
     return membership
 
 
+
+from app.schemas.self_membership import SelfMembershipResponse, SelfMembershipInfo, SelfMembershipCapabilities
+from app.models.community import Community
+from app.models.membership import MembershipStatus, MembershipRole
+from app.models.membership_permission import MembershipPermission, PermissionType
+from fastapi.responses import JSONResponse
+from fastapi import HTTPException
+
+
+from app.schemas.self_membership import SelfMembershipResponse, SelfMembershipInfo, SelfMembershipCapabilities
+from app.models.community import Community
+from app.models.membership import MembershipStatus, MembershipRole
+from app.models.membership_permission import MembershipPermission, PermissionType
+from fastapi.responses import JSONResponse
+from fastapi import HTTPException
+from app.api.deps import has_community_permission
+
+@router.get(
+    "/{community_slug}/membership/me",
+    response_model=SelfMembershipResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get current user's membership and capabilities in a community"
+)
+def get_self_membership(
+    community_slug: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    community = db.query(Community).filter(Community.slug == community_slug).first()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+        
+    membership = db.query(Membership).filter(
+        Membership.user_id == current_user.id,
+        Membership.community_id == community.id
+    ).first()
+    
+    capabilities = SelfMembershipCapabilities(
+        create_announcements=False,
+        manage_document_voting=False,
+        upload_official_documents=False
+    )
+    
+    mem_info = None
+    
+    if membership:
+        mem_info = SelfMembershipInfo(
+            id=membership.id,
+            status=membership.status,
+            role=membership.role
+        )
+        
+        capabilities.create_announcements = has_community_permission(db, membership, PermissionType.CREATE_ANNOUNCEMENTS)
+        capabilities.manage_document_voting = has_community_permission(db, membership, PermissionType.MANAGE_DOCUMENT_VOTING)
+        capabilities.upload_official_documents = has_community_permission(db, membership, PermissionType.UPLOAD_OFFICIAL_DOCUMENTS)
+
+    response_data = SelfMembershipResponse(
+        membership=mem_info,
+        capabilities=capabilities
+    )
+    
+    return JSONResponse(
+        content=response_data.model_dump(mode='json'),
+        headers={"Cache-Control": "private, no-store"}
+    )
+
+
 from app.api.deps import require_community_delegate, require_community_permission
 from app.models.membership_permission import PermissionType
 from app.models.membership import Membership
