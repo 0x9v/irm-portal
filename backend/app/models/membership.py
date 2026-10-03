@@ -32,6 +32,13 @@ class Membership(Base):
             postgresql_where=text("status IN ('PENDING', 'ACTIVE')"),
             sqlite_where=text("status IN ('PENDING', 'ACTIVE')")
         ),
+        Index(
+            "uq_memberships_community_active_delegate",
+            "community_id",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE' AND role = 'DELEGATE'"),
+            sqlite_where=text("status = 'ACTIVE' AND role = 'DELEGATE'")
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
