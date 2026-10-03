@@ -62,6 +62,13 @@ export default function MembershipPage() {
           <h2 className="font-semibold text-lg mb-2">Current Membership</h2>
           <p>Status: <span className="font-medium text-gray-800">{membership.status}</span></p>
           <p>Role: <span className="font-medium text-gray-800">{membership.role}</span></p>
+          {membership.status === "ACTIVE" && membership.role === "DELEGATE" && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <Link href="/communities/irm/membership/review" className="text-blue-600 hover:underline font-medium">
+                Review Pending Applications &rarr;
+              </Link>
+            </div>
+          )}
         </div>
       ) : (
         <div>

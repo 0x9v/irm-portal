@@ -105,6 +105,32 @@ from app.models.membership_permission import PermissionType
 from app.models.membership import Membership
 from app.services.membership import approve_membership, reject_membership
 
+
+from app.schemas.membership import PendingMembershipResponse
+from app.services.membership import get_pending_memberships
+
+@router.get(
+    "/{community_slug}/membership/pending",
+    response_model=list[PendingMembershipResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List pending membership requests"
+)
+def api_list_pending_memberships(
+    community_slug: str,
+    skip: int = 0,
+    limit: int = 100,
+    delegate: Membership = Depends(require_community_delegate),
+    db: Session = Depends(get_db)
+):
+    """
+    List pending membership requests for a community. Requires DELEGATE role.
+    """
+    results = get_pending_memberships(db, community_slug, skip=skip, limit=limit)
+    return JSONResponse(
+        content=[r.model_dump(mode='json') for r in results],
+        headers={"Cache-Control": "private, no-store"}
+    )
+
 @router.post(
     "/{community_slug}/membership/{membership_id}/approve",
     response_model=MembershipResponse,

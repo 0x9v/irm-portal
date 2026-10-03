@@ -298,3 +298,40 @@ def update_moderator_permissions(db: Session, community_slug: str, membership_id
     db.commit()
     
     return get_moderator_permissions(db, community_slug, membership_id)
+
+from app.schemas.membership import PendingMembershipResponse
+
+def get_pending_memberships(db: Session, community_slug: str, skip: int = 0, limit: int = 100) -> list[PendingMembershipResponse]:
+    community = db.query(Community).filter(Community.slug == community_slug).first()
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+        
+    query = (
+        db.query(Membership, User)
+        .join(User, Membership.user_id == User.id)
+        .filter(
+            Membership.community_id == community.id,
+            Membership.status == MembershipStatus.PENDING
+        )
+        .order_by(Membership.updated_at.asc(), Membership.id.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    
+    results = []
+    for membership, user in query:
+        results.append(
+            PendingMembershipResponse(
+                id=membership.id,
+                status=membership.status,
+                role=membership.role,
+                cne=membership.cne,
+                created_at=membership.created_at,
+                updated_at=membership.updated_at,
+                username=user.username,
+                first_name=user.first_name,
+                family_name=user.family_name
+            )
+        )
+    return results
