@@ -56,6 +56,7 @@ export default function MembershipReviewPage() {
   useEffect(() => {
     // Only fetch if definitely authorized locally to avoid redundant 403s
     if (membership && membership.status === "ACTIVE" && membership.role === "DELEGATE") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchQueue();
     }
   }, [membership, fetchQueue]);
@@ -63,6 +64,7 @@ export default function MembershipReviewPage() {
   // Clear data on unmount or auth loss
   useEffect(() => {
     if (!user || (membership && (membership.status !== "ACTIVE" || membership.role !== "DELEGATE"))) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQueue([]);
       setConfirmation(null);
       setError(null);
@@ -105,8 +107,8 @@ export default function MembershipReviewPage() {
         method: "POST"
       });
       
-      const newStatus = (resp as any).status;
-      const newRole = (resp as any).role;
+      const newStatus = (resp as Record<string, unknown>).status as string;
+      const newRole = (resp as Record<string, unknown>).role as string;
       
       setConfirmation({ 
         text: `Application was successfully ${action}d. Resulting status: ${newStatus}, role: ${newRole}.`, 
@@ -114,13 +116,15 @@ export default function MembershipReviewPage() {
       });
       
       // Successfully processed, refresh the queue
-      await fetchQueue();
+      await // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchQueue();
       
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
           setConfirmation({ text: "Application could not be reviewed in its current state (it may already have been processed).", type: "info" });
-          await fetchQueue();
+          await // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchQueue();
         } else if (err.status === 401 || err.status === 403) {
           setConfirmation({ text: "Authorization changed during review. Please refresh.", type: "error" });
           refresh();

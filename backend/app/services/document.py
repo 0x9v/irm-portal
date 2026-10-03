@@ -75,8 +75,17 @@ def upload_document(
     unique_filename = f"{uuid.uuid4()}{file_ext}"
     storage_key = f"{module.community_id}/{module.id}/{unique_filename}"
     
-    # Read file content safely
-    content = file.file.read()
+    from app.core.config import settings
+    # Read file content safely, enforcing maximum size without trusting Content-Length
+    max_bytes = settings.document_upload_max_bytes
+    
+    # Read up to max_bytes + 1 to detect overflow without loading a huge file into memory
+    content = file.file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {max_bytes // (1024 * 1024)} MiB."
+        )
 
     from app.core.storage.exceptions import StorageError
     from app.services.preview import create_and_store_preview

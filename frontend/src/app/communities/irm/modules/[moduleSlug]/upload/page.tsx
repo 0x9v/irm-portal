@@ -66,9 +66,9 @@ export default function UploadDocumentPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFile = e.target.files[0];
-      // Note: Backend limits are usually around 10MB to 50MB. Let's do a basic 50MB check just in case.
+      // Note: Backend limits are usually around 10MB to 50 MiB. Let's do a basic 50 MiB check just in case.
       if (selectedFile.size > 50 * 1024 * 1024) {
-        setSubmitError("File is too large. Maximum size is 50MB.");
+        setSubmitError("File is too large. Maximum size is 50 MiB.");
         setFile(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
@@ -126,7 +126,7 @@ export default function UploadDocumentPage() {
           setSubmitError(`Permission denied: ${err.message}`);
           await refresh();
         } else if (err.status === 413) {
-          setSubmitError("File exceeds the maximum allowed size.");
+          setSubmitError(`File is too large: ${err.message}`);
         } else if (err.status === 415) {
           setSubmitError("Unsupported file format. Only PDF, JPEG, and PNG are allowed.");
         } else if (err.status === 422) {

@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     database_host: str = "127.0.0.1"
     database_port: int = 5433
 
+    session_cookie_name: str = "session"
+    secure_cookies: bool = False
+    session_lifetime_days: int = 7
+    storage_root: Path = Field(default=ROOT_DIR / "storage")
+    frontend_url: str = "http://localhost:3000"
+    document_upload_max_bytes: int = Field(default=52428800, gt=0)
+
     @property
     def database_url(self) -> URL:
         return URL.create(
