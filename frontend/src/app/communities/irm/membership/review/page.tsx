@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { fetchApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
 
 type PendingMembership = {
   id: string;
@@ -72,28 +73,26 @@ export default function MembershipReviewPage() {
   }, [user, membership]);
 
   if (authLoading) {
-    return <div className="p-8 font-sans max-w-4xl mx-auto mt-10">Loading context...</div>;
+    return <div className="p-8 font-sans max-w-4xl mx-auto mt-10 text-gray-500">Loading applications queue...</div>;
   }
 
   if (!user) {
     return (
-      <div className="p-8 font-sans max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
-        <h1 className="text-2xl font-bold mb-6">Membership Review</h1>
-        <div className="text-gray-600">
-          Please <Link href="/login" className="text-blue-600 hover:underline">log in</Link>.
-        </div>
+      <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6">
+        <AccessDeniedGuidance isGuest={true} returnHref="/communities/irm/membership" returnLabel="Membership" />
       </div>
     );
   }
 
   if (!membership || membership.status !== "ACTIVE" || membership.role !== "DELEGATE") {
     return (
-      <div className="p-8 font-sans max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
-        <h1 className="text-2xl font-bold mb-6 text-red-600">Access Denied</h1>
-        <p className="text-gray-700">Only ACTIVE DELEGATE members can review applications.</p>
-        <Link href="/communities/irm/membership" className="mt-4 inline-block text-blue-600 hover:underline">
-          &larr; Back to Membership
-        </Link>
+      <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6">
+        <AccessDeniedGuidance
+          membershipStatus={membership?.status}
+          missingPermission="ACTIVE DELEGATE role"
+          returnHref="/communities/irm/membership"
+          returnLabel="Membership"
+        />
       </div>
     );
   }
@@ -140,12 +139,17 @@ export default function MembershipReviewPage() {
   return (
     <div className="p-8 font-sans max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline text-sm inline-block">
-            &larr; Back to Membership
-          </Link>
-          <Link href="/communities/irm/membership/staff" className="text-gray-500 hover:text-gray-700 hover:underline text-sm inline-block">
-            Staff Management
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2 text-sm">
+          <div className="flex gap-4 items-center">
+            <Link href="/communities/irm/membership" className="text-blue-600 hover:underline">
+              &larr; Back to Membership
+            </Link>
+            <Link href="/communities/irm/modules" className="text-gray-500 hover:text-gray-800 hover:underline">
+              Explore Modules
+            </Link>
+          </div>
+          <Link href="/communities/irm/membership/staff" className="text-gray-500 hover:text-gray-800 hover:underline">
+            Staff Management &rarr;
           </Link>
         </div>
         <h1 className="text-2xl font-bold">Review Applications</h1>

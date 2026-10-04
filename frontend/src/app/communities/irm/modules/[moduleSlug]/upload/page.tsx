@@ -7,6 +7,7 @@ import { fetchApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { ModuleResponse } from "../../page";
 import { DocumentResponse } from "../page";
+import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
 
 const DOCUMENT_TYPES = [
   { value: "COURSE", label: "Course" },
@@ -157,85 +158,115 @@ export default function UploadDocumentPage() {
   };
 
   if (authLoading || loadingMod) {
-    return <div className="p-8 font-sans max-w-2xl mx-auto mt-10 text-gray-600">Loading context...</div>;
+    return <div className="p-8 font-sans max-w-2xl mx-auto mt-10 text-gray-500">Loading module upload...</div>;
   }
 
   if (errorMod || !mod) {
     return (
-      <div className="p-8 font-sans max-w-2xl mx-auto mt-10">
-        <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-blue-600 hover:underline mb-4 inline-block">&larr; Back to Module</Link>
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded">{errorMod || "Module not found."}</div>
+      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6">
+        <AccessDeniedGuidance
+          isNotFound={true}
+          notFoundMessage={errorMod || "Module not found."}
+          returnHref="/communities/irm/modules"
+          returnLabel="Modules"
+        />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="p-8 font-sans max-w-2xl mx-auto mt-10">
-        <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-blue-600 hover:underline mb-4 inline-block">&larr; Back to Module</Link>
-        <div className="p-4 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded">
-          Authentication required. Please <Link href="/login" className="font-semibold underline">log in</Link> to upload.
-        </div>
+      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6">
+        <AccessDeniedGuidance
+          isGuest={true}
+          returnHref={`/communities/irm/modules/${moduleSlug}`}
+          returnLabel={mod.name}
+        />
       </div>
     );
   }
 
   if (!membership || membership.status !== "ACTIVE") {
     return (
-      <div className="p-8 font-sans max-w-2xl mx-auto mt-10">
-        <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-blue-600 hover:underline mb-4 inline-block">&larr; Back to Module</Link>
-        <div className="p-4 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded">
-          <p className="mb-2">ACTIVE IRM membership is required to upload documents.</p>
-          {membership?.status ? (
-            <p>Your current status is: <strong>{membership.status}</strong></p>
-          ) : (
-            <Link href="/communities/irm/membership" className="font-semibold underline">Request Membership</Link>
-          )}
-        </div>
+      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6">
+        <AccessDeniedGuidance
+          membershipStatus={membership?.status}
+          returnHref={`/communities/irm/modules/${moduleSlug}`}
+          returnLabel={mod.name}
+        />
       </div>
     );
   }
 
   if (submitSuccess) {
     return (
-      <div className="p-8 font-sans max-w-2xl mx-auto mt-10">
-        <h1 className="text-2xl font-bold mb-6">Upload to {mod.name}</h1>
-        <div className="p-6 bg-green-50 border border-green-200 text-green-800 rounded-lg">
+      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6 sm:mt-10">
+        <h1 className="text-2xl font-bold mb-6 text-gray-900">Upload to {mod.name}</h1>
+        <div className="p-6 bg-green-50 border border-green-200 text-green-800 rounded-xl">
           <h2 className="text-lg font-semibold mb-2">Upload Successful</h2>
           {submitSuccess.source === "STUDENT" ? (
             <>
               <p className="mb-4">Your document has been submitted for community voting.</p>
               <p className="mb-4 text-sm text-green-700">Note: You cannot vote on your own submission.</p>
-              <Link href="/communities/irm/documents/pending" className="inline-block bg-white text-green-700 font-medium px-4 py-2 rounded border border-green-300 hover:bg-green-100 mr-4">
-                View Pending Documents
-              </Link>
+              <div className="flex flex-wrap gap-3 items-center">
+                <Link href="/communities/irm/documents/pending" className="inline-block bg-white text-green-700 font-medium px-4 py-2 rounded-lg border border-green-300 hover:bg-green-100 text-sm transition-colors">
+                  View Pending Documents
+                </Link>
+                <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-sm text-green-800 hover:underline">
+                  &larr; Back to {mod.name}
+                </Link>
+              </div>
             </>
           ) : (
             <>
               <p className="mb-4">Your official document has been published immediately.</p>
-              <Link href={`/communities/irm/modules/${moduleSlug}/documents/${submitSuccess.id}`} className="inline-block bg-white text-green-700 font-medium px-4 py-2 rounded border border-green-300 hover:bg-green-100 mr-4">
-                View Document
-              </Link>
+              <div className="flex flex-wrap gap-3 items-center">
+                <Link href={`/communities/irm/modules/${moduleSlug}/documents/${submitSuccess.id}`} className="inline-block bg-white text-green-700 font-medium px-4 py-2 rounded-lg border border-green-300 hover:bg-green-100 text-sm transition-colors">
+                  View Document
+                </Link>
+                <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-sm text-green-800 hover:underline">
+                  &larr; Back to {mod.name}
+                </Link>
+              </div>
             </>
           )}
-          <button onClick={resetForm} className="mt-4 inline-block text-green-700 hover:underline font-medium">
-            Upload another document
-          </button>
+          <div className="mt-6 pt-4 border-t border-green-200">
+            <button type="button" onClick={resetForm} className="text-sm text-green-700 hover:underline font-medium">
+              Upload another document
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-8 font-sans max-w-2xl mx-auto mt-10">
+    <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6 sm:mt-10">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
+        <Link href="/" className="hover:text-gray-900 hover:underline">
+          IRM Hub
+        </Link>
+        <span>/</span>
+        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
+          Modules
+        </Link>
+        <span>/</span>
+        <Link href={`/communities/irm/modules/${moduleSlug}`} className="hover:text-gray-900 hover:underline">
+          {mod.name}
+        </Link>
+        <span>/</span>
+        <span className="text-gray-900 font-medium">Upload</span>
+      </nav>
+
       <div className="mb-6 flex justify-between items-center">
-        <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-gray-500 hover:underline text-sm inline-block">
+        <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-gray-500 hover:text-gray-900 hover:underline text-sm inline-block">
           &larr; Back to {mod.name}
         </Link>
       </div>
 
-      <h1 className="text-2xl font-bold mb-2">Upload Document</h1>
-      <p className="text-gray-500 text-sm mb-6">Module: {mod.name}</p>
+      <h1 className="text-2xl font-bold mb-1 text-gray-900">Upload Document</h1>
+      <p className="text-gray-500 text-sm mb-6">Module: <span className="font-semibold text-gray-800">{mod.name}</span></p>
 
       <form onSubmit={handleSubmit} className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm space-y-6">
         

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { fetchApi, ApiError } from "@/lib/api";
 import { ModuleResponse } from "../page";
 import { useAuth } from "@/context/AuthContext";
+import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
 
 export type DocumentResponse = {
   id: string;
@@ -65,31 +66,57 @@ export default function ModuleDetailPage() {
   const isActiveMember = membership?.status === "ACTIVE";
 
   return (
-    <div className="p-8 font-sans max-w-4xl mx-auto mt-10">
-      <div className="mb-6 flex justify-between items-center">
-        <Link href="/communities/irm/modules" className="text-gray-500 hover:underline text-sm inline-block">
+    <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
+        <Link href="/" className="hover:text-gray-900 hover:underline">
+          IRM Hub
+        </Link>
+        <span>/</span>
+        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
+          Modules
+        </Link>
+        {mod && (
+          <>
+            <span>/</span>
+            <span className="text-gray-900 font-medium">{mod.name}</span>
+          </>
+        )}
+      </nav>
+
+      <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+        <Link href="/communities/irm/modules" className="text-gray-500 hover:text-gray-900 hover:underline text-sm inline-block">
           &larr; Back to Modules
         </Link>
-        {isActiveMember && mod && (
-          <Link href={`/communities/irm/modules/${mod.slug}/upload`} className="text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-medium">
+        {isActiveMember && mod ? (
+          <Link href={`/communities/irm/modules/${mod.slug}/upload`} className="text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors">
             Upload Document
           </Link>
-        )}
+        ) : mod ? (
+          <Link href="/communities/irm/membership" className="text-xs text-blue-600 hover:underline bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg">
+            Active membership required to upload
+          </Link>
+        ) : null}
       </div>
 
       {loading ? (
-        <div className="text-gray-600">Loading module...</div>
+        <div className="text-gray-500 py-8">Loading module details...</div>
       ) : error ? (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded">
+        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg">
           {error}
         </div>
       ) : !mod ? (
-        <div className="text-gray-600">Module not found.</div>
+        <AccessDeniedGuidance
+          isNotFound={true}
+          notFoundMessage="Module not found. It may have been removed or renamed."
+          returnHref="/communities/irm/modules"
+          returnLabel="Modules"
+        />
       ) : (
         <div>
-          <div className="mb-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
-            <h1 className="text-2xl font-bold mb-2">{mod.name}</h1>
-            <p className="text-sm text-gray-500">Slug: {mod.slug}</p>
+          <div className="mb-8 p-6 bg-white border border-gray-200 rounded-xl shadow-sm">
+            <h1 className="text-2xl font-bold mb-2 text-gray-900">{mod.name}</h1>
+            <p className="text-sm text-gray-500">Module code: <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{mod.slug}</span></p>
           </div>
 
           <h2 className="text-xl font-bold mb-4">Approved Documents</h2>

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { fetchApi, downloadApiFile, ApiError, API_URL } from "@/lib/api";
+import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
 
 type PendingDocument = {
   id: string;
@@ -188,14 +189,30 @@ export default function PendingDocumentsPage() {
   };
 
   return (
-    <main className="p-8 font-sans max-w-4xl mx-auto mt-10">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Pending Documents</h1>
-        <div className="flex gap-4">
-          <Link href="/communities/irm/modules" className="text-blue-600 hover:underline text-sm">
+    <main className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
+        <Link href="/" className="hover:text-gray-900 hover:underline">
+          IRM Hub
+        </Link>
+        <span>/</span>
+        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
+          Modules
+        </Link>
+        <span>/</span>
+        <span className="text-gray-900 font-medium">Pending Review</span>
+      </nav>
+
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Pending Documents</h1>
+          <p className="text-sm text-gray-500 mt-1">Review and verify student resource submissions.</p>
+        </div>
+        <div className="flex gap-4 items-center">
+          <Link href="/communities/irm/modules" className="text-blue-600 hover:underline text-sm font-medium">
             Back to Modules
           </Link>
-          <button onClick={() => loadDocs(false)} className="text-blue-600 hover:underline text-sm">
+          <button onClick={() => loadDocs(false)} className="text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-2.5 py-1 text-sm hover:bg-gray-50">
             Refresh
           </button>
         </div>
@@ -223,17 +240,18 @@ export default function PendingDocumentsPage() {
       )}
 
       {loading && !docs ? (
-        <div className="text-gray-600">Loading pending documents...</div>
+        <div className="text-gray-500 py-8">Loading pending documents...</div>
       ) : error ? (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded flex flex-col gap-2 items-start">
-          <span>{error}</span>
-          {authStatus === 401 && (
-            <Link href="/login" className="text-blue-700 underline font-medium mt-2">
-              Go to Login
-            </Link>
-          )}
-          <button onClick={() => loadDocs(false)} className="mt-2 bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded text-sm">Retry</button>
-        </div>
+        authStatus === 401 ? (
+          <AccessDeniedGuidance isGuest={true} returnHref="/communities/irm/modules" returnLabel="Modules" />
+        ) : authStatus === 403 ? (
+          <AccessDeniedGuidance membershipStatus="PENDING" returnHref="/communities/irm/modules" returnLabel="Modules" />
+        ) : (
+          <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg flex flex-col gap-2 items-start">
+            <span>{error}</span>
+            <button onClick={() => loadDocs(false)} className="mt-2 bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded text-sm">Retry</button>
+          </div>
+        )
       ) : docs?.length === 0 ? (
         <div className="text-gray-600">No pending documents to review.</div>
       ) : (

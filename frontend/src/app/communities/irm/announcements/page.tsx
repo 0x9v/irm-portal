@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
 
 interface AnnouncementResponse {
   id: string;
@@ -99,35 +100,54 @@ export default function AnnouncementsPage() {
   }
 
   if (error) {
+    const isGuest = error.toLowerCase().includes("log in") || error.toLowerCase().includes("unauthorized");
+    const isMemberRequired = error.toLowerCase().includes("active member") || error.toLowerCase().includes("forbidden");
+
     return (
-      <div className="p-8 font-sans max-w-4xl mx-auto mt-10">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">IRM Announcements</h1>
-          <div className="flex gap-4">
-            <Link href="/communities/irm/modules" className="text-blue-600 hover:underline text-sm">
-              Modules
-            </Link>
-            <Link href="/communities/irm/membership" className="text-blue-600 hover:underline text-sm">
-              Membership
-            </Link>
+      <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
+        <div className="mb-4 text-sm">
+          <Link href="/communities/irm/modules" className="text-gray-500 hover:text-gray-900 hover:underline">
+            &larr; Back to Modules
+          </Link>
+        </div>
+        {isGuest ? (
+          <AccessDeniedGuidance isGuest={true} returnHref="/communities/irm/modules" returnLabel="Modules" />
+        ) : isMemberRequired ? (
+          <AccessDeniedGuidance membershipStatus="PENDING" returnHref="/communities/irm/modules" returnLabel="Modules" />
+        ) : (
+          <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg">
+            {error}
           </div>
-        </div>
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded">
-          {error}
-        </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="p-8 font-sans max-w-4xl mx-auto mt-10">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">IRM Announcements</h1>
-        <div className="flex gap-4">
-          <Link href="/communities/irm/modules" className="text-blue-600 hover:underline text-sm">
+    <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
+        <Link href="/" className="hover:text-gray-900 hover:underline">
+          IRM Hub
+        </Link>
+        <span>/</span>
+        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
+          Modules
+        </Link>
+        <span>/</span>
+        <span className="text-gray-900 font-medium">Announcements</span>
+      </nav>
+
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">IRM Announcements</h1>
+          <p className="text-sm text-gray-500 mt-1">Official updates and notices for the IRM community.</p>
+        </div>
+        <div className="flex gap-4 items-center text-sm">
+          <Link href="/communities/irm/modules" className="text-blue-600 hover:underline font-medium">
             Modules
           </Link>
-          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline text-sm">
+          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline font-medium">
             Membership
           </Link>
         </div>

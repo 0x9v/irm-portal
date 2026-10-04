@@ -99,27 +99,50 @@ export default function DocumentVotingSettingsPage() {
   };
 
   return (
-    <div className="p-8 font-sans max-w-2xl mx-auto mt-10">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Document Voting Settings</h1>
-        <Link href="/communities/irm/modules" className="text-blue-600 hover:underline text-sm">
-          Back to Modules
+    <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6 sm:mt-10">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
+        <Link href="/" className="hover:text-gray-900 hover:underline">
+          IRM Hub
+        </Link>
+        <span>/</span>
+        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
+          Modules
+        </Link>
+        <span>/</span>
+        <span className="text-gray-900 font-medium">Voting Settings</span>
+      </nav>
+
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Document Voting Settings</h1>
+          <p className="text-sm text-gray-500 mt-1">Configure community voting thresholds.</p>
+        </div>
+        <Link href="/communities/irm/modules" className="text-blue-600 hover:underline text-sm font-medium">
+          &larr; Back to Modules
         </Link>
       </div>
 
       {authLoading || loading ? (
-        <div className="text-gray-600">Loading settings...</div>
+        <div className="text-gray-500 py-8">Loading settings...</div>
       ) : error ? (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded flex flex-col gap-2 items-start">
-          <span>{error}</span>
-          {authStatus === 401 && (
-            <Link href="/login" className="text-blue-700 underline font-medium mt-2">
-              Go to Login
+        <div className="p-5 bg-red-50 text-red-700 border border-red-200 rounded-xl flex flex-col gap-3 items-start">
+          <p className="font-medium">{error}</p>
+          <div className="flex flex-wrap gap-3 items-center pt-2">
+            {authStatus === 401 && (
+              <Link href="/login" className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors">
+                Go to Login
+              </Link>
+            )}
+            <Link href="/communities/irm/modules" className="text-sm text-gray-600 hover:text-gray-900 hover:underline">
+              &larr; Back to Modules
             </Link>
-          )}
-          {authStatus !== 401 && authStatus !== 403 && (
-            <button onClick={() => loadSettings(false)} className="mt-2 bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded text-sm">Retry</button>
-          )}
+            {authStatus !== 401 && authStatus !== 403 && (
+              <button onClick={() => loadSettings(false)} className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1.5 rounded-lg text-sm font-medium">
+                Retry
+              </button>
+            )}
+          </div>
         </div>
       ) : capabilities?.manage_document_voting ? (
         <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm">

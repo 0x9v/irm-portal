@@ -15,7 +15,8 @@ export type ModuleResponse = {
 };
 
 export default function ModulesPage() {
-  const { capabilities } = useAuth();
+  const { membership, capabilities } = useAuth();
+  const isActiveMember = membership?.status === "ACTIVE";
   const [modules, setModules] = useState<ModuleResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,21 +47,32 @@ export default function ModulesPage() {
   }, []);
 
   return (
-    <div className="p-8 font-sans max-w-4xl mx-auto mt-10">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">IRM Modules</h1>
-        <div className="flex gap-4">
-          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline text-sm">
+    <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
+      <div className="mb-4 text-sm">
+        <Link href="/" className="text-gray-500 hover:text-gray-900 hover:underline inline-flex items-center gap-1">
+          &larr; Back to IRM Hub
+        </Link>
+      </div>
+
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">IRM Modules</h1>
+          <p className="text-sm text-gray-500 mt-1">Browse study resources organized by course module.</p>
+        </div>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline font-medium">
             Membership
           </Link>
-          <Link href="/communities/irm/announcements" className="text-blue-600 hover:underline text-sm">
+          <Link href="/communities/irm/announcements" className="text-blue-600 hover:underline font-medium">
             Announcements
           </Link>
-          <Link href="/communities/irm/documents/pending" className="text-blue-600 hover:underline text-sm">
-            Pending Docs
-          </Link>
+          {isActiveMember && (
+            <Link href="/communities/irm/documents/pending" className="text-blue-600 hover:underline font-medium">
+              Pending Docs
+            </Link>
+          )}
           {capabilities?.manage_document_voting && (
-            <Link href="/communities/irm/document-voting/settings" className="text-blue-600 hover:underline text-sm">
+            <Link href="/communities/irm/document-voting/settings" className="text-blue-600 hover:underline font-medium">
               Voting Settings
             </Link>
           )}

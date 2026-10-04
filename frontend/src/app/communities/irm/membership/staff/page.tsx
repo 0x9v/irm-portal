@@ -228,12 +228,17 @@ export default function StaffManagementPage() {
   return (
     <div className="p-8 font-sans max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline text-sm inline-block">
-            &larr; Back to Membership
-          </Link>
-          <Link href="/communities/irm/membership/review" className="text-gray-500 hover:text-gray-700 hover:underline text-sm inline-block">
-            Review Applications
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2 text-sm">
+          <div className="flex gap-4 items-center">
+            <Link href="/communities/irm/membership" className="text-blue-600 hover:underline">
+              &larr; Back to Membership
+            </Link>
+            <Link href="/communities/irm/modules" className="text-gray-500 hover:text-gray-800 hover:underline">
+              Explore Modules
+            </Link>
+          </div>
+          <Link href="/communities/irm/membership/review" className="text-gray-500 hover:text-gray-800 hover:underline">
+            Review Applications &rarr;
           </Link>
         </div>
         <h1 className="text-2xl font-bold">Staff Management</h1>

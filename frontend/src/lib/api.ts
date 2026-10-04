@@ -1,7 +1,7 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public details?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -30,8 +30,10 @@ export async function fetchApi<T>(path: string, options: RequestInit = {}): Prom
   if (!response.ok) {
     // 4xx or 5xx response
     let errorMessage = `API request failed with status ${response.status}`;
+    let rawDetail: unknown = undefined;
     try {
       const errorData = await response.json();
+      rawDetail = errorData.detail;
       if (errorData.detail) {
         if (typeof errorData.detail === 'string') {
           errorMessage = errorData.detail;
@@ -42,7 +44,7 @@ export async function fetchApi<T>(path: string, options: RequestInit = {}): Prom
     } catch {
       // Ignore JSON parse errors for error responses
     }
-    throw new ApiError(response.status, errorMessage);
+    throw new ApiError(response.status, errorMessage, rawDetail);
   }
 
   if (response.status === 204) {

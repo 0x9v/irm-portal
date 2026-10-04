@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { fetchApi, downloadApiFile, ApiError } from "@/lib/api";
 import { DocumentResponse } from "../../page";
+import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
 
 export default function DocumentDetailPage() {
   const params = useParams();
@@ -73,27 +74,59 @@ export default function DocumentDetailPage() {
   };
 
   return (
-    <main className="p-8 font-sans max-w-2xl mx-auto mt-10">
-      <div className="mb-6">
+    <main className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6 sm:mt-10">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
+        <Link href="/" className="hover:text-gray-900 hover:underline">
+          IRM Hub
+        </Link>
+        <span>/</span>
+        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
+          Modules
+        </Link>
+        <span>/</span>
+        <Link href={`/communities/irm/modules/${moduleSlug}`} className="hover:text-gray-900 hover:underline">
+          {moduleSlug}
+        </Link>
+        {doc && (
+          <>
+            <span>/</span>
+            <span className="text-gray-900 font-medium truncate max-w-xs">{doc.title}</span>
+          </>
+        )}
+      </nav>
+
+      <div className="mb-6 flex flex-wrap justify-between items-center gap-2">
         <Link 
           href={`/communities/irm/modules/${moduleSlug}`} 
-          className="text-gray-500 hover:underline text-sm mb-2 inline-block"
+          className="text-gray-500 hover:text-gray-900 hover:underline text-sm inline-block"
         >
           &larr; Back to Module
+        </Link>
+        <Link
+          href="/communities/irm/modules"
+          className="text-gray-400 hover:text-gray-700 hover:underline text-xs"
+        >
+          All Modules
         </Link>
       </div>
 
       {loading ? (
-        <div className="text-gray-600">Loading document...</div>
+        <div className="text-gray-500 py-8">Loading document details...</div>
       ) : error ? (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded">
+        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg">
           {error}
         </div>
       ) : !doc ? (
-        <div className="text-gray-600">Document not found.</div>
+        <AccessDeniedGuidance
+          isNotFound={true}
+          notFoundMessage="Document not found. It may have been removed or rejected."
+          returnHref={`/communities/irm/modules/${moduleSlug}`}
+          returnLabel="Module"
+        />
       ) : (
-        <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
-          <h1 className="text-2xl font-bold mb-4">{doc.title}</h1>
+        <div className="p-6 sm:p-8 bg-white border border-gray-200 rounded-xl shadow-sm">
+          <h1 className="text-2xl font-bold mb-4 text-gray-900">{doc.title}</h1>
           
           <div className="space-y-3 mb-8">
             <p className="text-sm text-gray-700">
