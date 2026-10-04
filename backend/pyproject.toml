@@ -5,9 +5,19 @@ description = "Backend API for the IRM Platform"
 requires-python = ">=3.14"
 dependencies = [
     "alembic",
+    "argon2-cffi",
+    "email-validator",
     "fastapi",
     "pydantic-settings",
     "psycopg[binary]",
     "sqlalchemy",
     "uvicorn[standard]",
+    "python-multipart",
+    "pymupdf",
+    "pillow",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
 ]

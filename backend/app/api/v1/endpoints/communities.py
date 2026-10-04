@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.database.session import get_db
 from app.models.user import User
-from app.schemas.membership import MembershipCreate, MembershipResponse
+from app.schemas.membership import MembershipCreate, MembershipResponse, ActiveMembershipResponse, RoleTransitionRequest
 from app.services.membership import create_membership_request
 
 router = APIRouter()
@@ -246,7 +246,36 @@ def update_document_voting_settings(
     )
 
 from app.schemas.membership_permission import MembershipPermissionsResponse, MembershipPermissionsUpdate
-from app.services.membership import get_moderator_permissions, update_moderator_permissions
+from app.services.membership import get_moderator_permissions, update_moderator_permissions, get_active_memberships, transition_membership_role
+
+
+@router.get(
+    "/{community_slug}/membership/active",
+    response_model=list[ActiveMembershipResponse],
+    dependencies=[Depends(require_community_delegate)],
+)
+def api_get_active_memberships(
+    community_slug: str,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "private, no-store"
+    return get_active_memberships(db, community_slug)
+
+@router.patch(
+    "/{community_slug}/membership/{membership_id}/role",
+    response_model=MembershipResponse,
+    dependencies=[Depends(require_community_delegate)],
+)
+def api_transition_role(
+    community_slug: str,
+    membership_id: str,
+    request: RoleTransitionRequest,
+    db: Session = Depends(get_db),
+):
+    from app.models.membership import MembershipRole
+    role_enum = MembershipRole[request.role]
+    return transition_membership_role(db, community_slug, membership_id, role_enum)
 
 @router.get(
     "/{community_slug}/membership/{membership_id}/permissions",

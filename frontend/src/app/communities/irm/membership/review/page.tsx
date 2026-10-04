@@ -140,9 +140,14 @@ export default function MembershipReviewPage() {
   return (
     <div className="p-8 font-sans max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
       <div className="mb-6">
-        <Link href="/communities/irm/membership" className="text-blue-600 hover:underline text-sm mb-2 inline-block">
-          &larr; Back to Membership
-        </Link>
+        <div className="flex justify-between items-center mb-2">
+          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline text-sm inline-block">
+            &larr; Back to Membership
+          </Link>
+          <Link href="/communities/irm/membership/staff" className="text-gray-500 hover:text-gray-700 hover:underline text-sm inline-block">
+            Staff Management
+          </Link>
+        </div>
         <h1 className="text-2xl font-bold">Review Applications</h1>
         <p className="text-sm text-gray-500 mt-1">
           Review pending applicant CNEs carefully.

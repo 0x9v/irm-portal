@@ -33,3 +33,24 @@ class PendingMembershipResponse(BaseModel):
     family_name: str
     
     model_config = ConfigDict(from_attributes=True)
+
+class ActiveMembershipResponse(BaseModel):
+    id: UUID
+    status: MembershipStatus
+    role: MembershipRole
+    created_at: datetime
+    updated_at: datetime
+    
+    # Member details
+    username: str
+    first_name: str
+    family_name: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
+from typing import Literal
+
+class RoleTransitionRequest(BaseModel):
+    role: Literal['MEMBER', 'MODERATOR']
+
+    model_config = ConfigDict(extra='forbid')

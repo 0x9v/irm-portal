@@ -222,7 +222,7 @@ def _get_target_moderator_locked(db: Session, community_slug: str, membership_id
     membership = db.query(Membership).filter(
         Membership.id == m_id,
         Membership.community_id == community.id
-    ).with_for_update().first()
+    ).populate_existing().with_for_update().first()
     
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
@@ -396,3 +396,89 @@ def withdraw_membership_request(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to withdraw membership request."
         )
+
+def get_active_memberships(db: Session, community_slug: str) -> list[dict]:
+    community = db.query(Community).filter(Community.slug == community_slug).first()
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+        
+    memberships = (
+        db.query(Membership, User)
+        .join(User, Membership.user_id == User.id)
+        .filter(
+            Membership.community_id == community.id,
+            Membership.status == MembershipStatus.ACTIVE
+        )
+        # Tie-breaker deterministic sort
+        .order_by(Membership.created_at.asc(), Membership.id.asc())
+        .all()
+    )
+    
+    results = []
+    for m, u in memberships:
+        results.append({
+            "id": m.id,
+            "status": m.status,
+            "role": m.role,
+            "created_at": m.created_at,
+            "updated_at": m.updated_at,
+            "username": u.username,
+            "first_name": u.first_name,
+            "family_name": u.family_name
+        })
+    return results
+
+def transition_membership_role(db: Session, community_slug: str, membership_id: str, new_role: MembershipRole) -> Membership:
+    from uuid import UUID
+    try:
+        m_id = UUID(membership_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+        
+    initial_membership = db.query(Membership).filter(Membership.id == m_id).first()
+    if not initial_membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+        
+    # Compatible lock order: Target User -> Target Membership
+    db.query(User).filter(User.id == initial_membership.user_id).with_for_update().first()
+    
+    community = db.query(Community).filter(Community.slug == community_slug).first()
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+        
+    membership = db.query(Membership).filter(
+        Membership.id == m_id,
+        Membership.community_id == community.id
+    ).populate_existing().with_for_update().first()
+    
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+        
+    if membership.status != MembershipStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Target membership is not ACTIVE"
+        )
+        
+    if membership.role == MembershipRole.DELEGATE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot alter the role of a DELEGATE through this endpoint"
+        )
+
+    if membership.role == MembershipRole.MODERATOR and new_role == MembershipRole.MODERATOR:
+        # Idempotent response for MODERATOR -> MODERATOR, preserve grants
+        pass
+    else:
+        membership.role = new_role
+        for p in list(membership.permissions):
+            db.delete(p)
+        
+    try:
+        db.commit()
+        db.refresh(membership)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to transition role")
+        
+    return membership

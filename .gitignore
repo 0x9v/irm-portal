@@ -34,3 +34,12 @@ storage/tmp/*
 
 # OS
 .DS_Store
+
+# Runtime uploads directly under storage/
+/storage/*
+!/storage/documents/
+!/storage/tmp/
+
+# Browser test output
+playwright-report/
+test-results/
