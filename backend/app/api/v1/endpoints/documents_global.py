@@ -55,8 +55,8 @@ def vote_on_document(
 import uuid
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
-from app.models.document import Document
-from app.services.document import get_document_download_info
+from app.models.document import Document, DocumentStatus
+from app.services.document import get_document_download_info, ALLOWED_MIME_TYPES
 from app.services.document_vote import check_full_document_access
 
 @router.get(
@@ -107,3 +107,72 @@ def download_global_document(
         content_disposition_type="attachment",
         headers={"Cache-Control": "private, no-store"}
     )
+
+
+@router.get(
+    "/{document_id}/view",
+    status_code=status.HTTP_200_OK,
+    summary="View an approved original document inline",
+)
+def view_approved_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    View the physical file of an APPROVED document inline.
+    Requires authentication. Only APPROVED documents are eligible.
+    PENDING and REJECTED documents return 404 Not Found.
+    """
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found."
+        )
+
+    doc = db.query(Document).filter(Document.id == doc_uuid).first()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found."
+        )
+
+    # 1. Enforce APPROVED-only restriction explicitly:
+    # PENDING documents (including for YES voters) and REJECTED documents must return safe 404
+    if doc.status != DocumentStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found."
+        )
+
+    # 2. Evaluate authorization using the shared access decision
+    if not check_full_document_access(db, doc, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found."
+        )
+
+    # 3. Only after authorization succeeds, resolve physical file info
+    file_path, mime_type, safe_filename = get_document_download_info(doc)
+
+    # 4. Verify MIME type is supported for inline viewing (PDF, JPEG, PNG)
+    if mime_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Unsupported document format for inline viewing."
+        )
+
+    # 5. Return FileResponse with inline disposition and security headers
+    return FileResponse(
+        path=file_path,
+        media_type=mime_type,
+        filename=safe_filename,
+        content_disposition_type="inline",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+

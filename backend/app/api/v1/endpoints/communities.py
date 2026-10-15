@@ -4,8 +4,17 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.database.session import get_db
 from app.models.user import User
-from app.schemas.membership import MembershipCreate, MembershipResponse, ActiveMembershipResponse, RoleTransitionRequest
+from app.schemas.membership import (
+    MembershipApplicationOptions,
+    MembershipCreate,
+    MembershipResponse,
+    ActiveMembershipResponse,
+    RoleTransitionRequest,
+    CUSTOM_PROMOTION_FORMATS,
+    promotion_options,
+)
 from app.services.membership import create_membership_request
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -28,7 +37,12 @@ def request_membership(
         db=db,
         user=current_user,
         community_slug=community_slug,
-        cne=membership_in.cne
+        cne=membership_in.cne,
+        applicant_type=membership_in.applicant_type,
+        applicant_first_name=membership_in.applicant_first_name,
+        applicant_family_name=membership_in.applicant_family_name,
+        identifier_type=membership_in.identifier_type,
+        promotion=membership_in.promotion,
     )
     return membership
 
@@ -36,7 +50,12 @@ def request_membership(
 
 from app.schemas.self_membership import SelfMembershipResponse, SelfMembershipInfo, SelfMembershipCapabilities
 from app.models.community import Community
-from app.models.membership import MembershipStatus, MembershipRole
+from app.models.membership import (
+    MembershipApplicantType,
+    MembershipIdentifierType,
+    MembershipStatus,
+    MembershipRole,
+)
 from app.models.membership_permission import MembershipPermission, PermissionType
 from fastapi.responses import JSONResponse
 from fastapi import HTTPException
@@ -82,7 +101,13 @@ def get_self_membership(
         mem_info = SelfMembershipInfo(
             id=membership.id,
             status=membership.status,
-            role=membership.role
+            role=membership.role,
+            cne=membership.cne,
+            applicant_type=membership.applicant_type,
+            applicant_first_name=membership.applicant_first_name,
+            applicant_family_name=membership.applicant_family_name,
+            identifier_type=membership.identifier_type,
+            promotion=membership.promotion,
         )
         
         capabilities.create_announcements = has_community_permission(db, membership, PermissionType.CREATE_ANNOUNCEMENTS)
@@ -93,10 +118,34 @@ def get_self_membership(
         membership=mem_info,
         capabilities=capabilities
     )
-    
     return JSONResponse(
         content=response_data.model_dump(mode='json'),
         headers={"Cache-Control": "private, no-store"}
+    )
+
+
+@router.get(
+    "/{community_slug}/membership/application-options",
+    response_model=MembershipApplicationOptions,
+    status_code=status.HTTP_200_OK,
+    summary="Get membership application choices and promotion policy",
+)
+def get_membership_application_options(
+    community_slug: str,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not db.query(Community).filter(Community.slug == community_slug).first():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+    current_start = settings.membership_current_academic_year_start
+    response.headers["Cache-Control"] = "private, no-store"
+    return MembershipApplicationOptions(
+        current_academic_year_start=current_start,
+        applicant_types=[MembershipApplicantType.STUDENT, MembershipApplicantType.LAUREATE],
+        student_identifier_types=[MembershipIdentifierType.MASSAR, MembershipIdentifierType.FOREIGN],
+        promotion_options=promotion_options(current_start),
+        custom_promotion_formats=CUSTOM_PROMOTION_FORMATS,
     )
 
 
@@ -314,3 +363,91 @@ def api_update_permissions(
         content=permissions.model_dump(),
         headers={"Cache-Control": "private, no-store"}
     )
+
+
+from app.services.membership import (
+    remove_community_membership,
+    ban_community_membership,
+    unban_community_membership,
+)
+
+
+@router.delete(
+    "/{community_slug}/memberships/{membership_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a member from the community",
+)
+def api_remove_membership(
+    community_slug: str,
+    membership_id: str,
+    delegate: Membership = Depends(require_community_delegate),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    remove_community_membership(db, community_slug, membership_id, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "private, no-store"})
+
+
+@router.put(
+    "/{community_slug}/memberships/{membership_id}/ban",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Ban a member from the community",
+)
+def api_ban_membership(
+    community_slug: str,
+    membership_id: str,
+    delegate: Membership = Depends(require_community_delegate),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ban_community_membership(db, community_slug, membership_id, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "private, no-store"})
+
+
+@router.delete(
+    "/{community_slug}/memberships/{membership_id}/ban",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Unban a member from the community",
+)
+def api_unban_membership(
+    community_slug: str,
+    membership_id: str,
+    delegate: Membership = Depends(require_community_delegate),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    unban_community_membership(db, community_slug, membership_id, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "private, no-store"})
+
+
+from uuid import UUID
+from fastapi import Query
+from app.api.content_route import PrivateContentRoute
+from app.schemas.membership import MembershipDirectoryResponse
+from app.services.membership import list_community_memberships
+
+
+def api_list_community_memberships(
+    community_slug: str,
+    status: MembershipStatus | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    after: UUID | None = Query(default=None),
+    delegate: Membership = Depends(require_community_delegate),
+    db: Session = Depends(get_db),
+) -> MembershipDirectoryResponse:
+    """Minimal community directory, available only to its ACTIVE Delegate."""
+    return list_community_memberships(
+        db, community_slug, status_filter=status, limit=limit, after=after
+    )
+
+
+# Apply private caching to this read, including dependency/validation errors,
+# without changing any existing community or mutation route contracts.
+router.add_api_route(
+    "/{community_slug}/memberships",
+    api_list_community_memberships,
+    methods=["GET"],
+    response_model=MembershipDirectoryResponse,
+    summary="List community memberships (Delegate only)",
+    route_class_override=PrivateContentRoute,
+)

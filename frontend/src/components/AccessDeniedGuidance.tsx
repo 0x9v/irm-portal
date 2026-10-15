@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonStyles } from "@/components/ui/Button";
 import { MembershipStatus } from "@/context/AuthContext";
 
 interface AccessDeniedGuidanceProps {
@@ -22,12 +23,12 @@ export default function AccessDeniedGuidance({
 }: AccessDeniedGuidanceProps) {
   if (isNotFound) {
     return (
-      <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl mx-auto mt-8">
-        <h2 className="text-xl font-bold text-gray-800 mb-2">Resource Not Found</h2>
-        <p className="text-gray-600 mb-6">{notFoundMessage || "The requested module or document could not be found."}</p>
+      <div className="ui-surface max-w-2xl mx-auto my-6">
+        <h2 className="ui-section-heading text-text mb-2">Resource Not Found</h2>
+        <p className="text-text-muted mb-6 text-base leading-6">{notFoundMessage || "The requested module or document could not be found."}</p>
         <Link
           href={returnHref}
-          className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+          className={buttonStyles("quiet")}
         >
           &larr; Back to {returnLabel}
         </Link>
@@ -37,30 +38,30 @@ export default function AccessDeniedGuidance({
 
   if (isGuest) {
     return (
-      <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl mx-auto mt-8">
-        <div className="inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 mb-3">
+      <div className="ui-surface max-w-2xl mx-auto my-6">
+        <div className="inline-block px-2.5 py-1 rounded-tag text-sm font-semibold bg-warning-surface text-warning border border-warning-border mb-3">
           Login Required
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Authentication Needed</h2>
-        <p className="text-gray-600 mb-6">
+        <h2 className="ui-section-heading text-text mb-2">Authentication Needed</h2>
+        <p className="text-text-muted mb-6 text-base leading-6">
           This community area requires an account. Please log in to your account or register to participate in the IRM community.
         </p>
         <div className="flex flex-wrap gap-3 items-center">
           <Link
             href="/login"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded text-sm transition-colors"
+            className={buttonStyles("primary")}
           >
             Log In
           </Link>
           <Link
             href="/register"
-            className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium px-4 py-2 rounded text-sm border border-gray-300 transition-colors"
+            className={buttonStyles("secondary")}
           >
             Create an Account
           </Link>
           <Link
             href={returnHref}
-            className="text-sm text-gray-600 hover:text-gray-900 hover:underline ml-2"
+            className={buttonStyles("quiet")}
           >
             &larr; Back to {returnLabel}
           </Link>
@@ -69,26 +70,26 @@ export default function AccessDeniedGuidance({
     );
   }
 
-  if (missingPermission) {
+  if (missingPermission && membershipStatus === "ACTIVE") {
     return (
-      <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl mx-auto mt-8">
-        <div className="inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 mb-3">
+      <div className="ui-surface max-w-2xl mx-auto my-6">
+        <div className="inline-block px-2.5 py-1 rounded-tag text-sm font-semibold bg-error-surface text-error border border-error-border mb-3">
           Permission Restricted
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Staff Authorization Required</h2>
-        <p className="text-gray-600 mb-6">
+        <h2 className="ui-section-heading text-text mb-2">Staff Authorization Required</h2>
+        <p className="text-text-muted mb-6 text-base leading-6">
           You are an active community member, but this action requires {missingPermission}. If you need this privilege, please contact the IRM community Delegate.
         </p>
         <div className="flex flex-wrap gap-3 items-center">
           <Link
             href={returnHref}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded text-sm transition-colors"
+            className={buttonStyles("primary")}
           >
             Back to {returnLabel}
           </Link>
           <Link
-            href="/communities/irm/membership"
-            className="text-sm text-gray-600 hover:text-gray-900 hover:underline ml-2"
+            href="/account#community-membership"
+            className={buttonStyles("quiet")}
           >
             View Membership Status
           </Link>
@@ -99,24 +100,24 @@ export default function AccessDeniedGuidance({
 
   if (membershipStatus === "PENDING") {
     return (
-      <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl mx-auto mt-8">
-        <div className="inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 mb-3">
+      <div className="ui-surface max-w-2xl mx-auto my-6">
+        <div className="inline-block px-2.5 py-1 rounded-tag text-sm font-semibold bg-warning-surface text-warning border border-warning-border mb-3">
           Application Pending
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Membership Under Review</h2>
-        <p className="text-gray-600 mb-6">
+        <h2 className="ui-section-heading text-text mb-2">Membership Under Review</h2>
+        <p className="text-text-muted mb-6 text-base leading-6">
           Your IRM membership application has been submitted and is currently awaiting manual verification by the community Delegate. Once approved, you will have access to pending documents, community voting, and resource contributions.
         </p>
         <div className="flex flex-wrap gap-3 items-center">
           <Link
-            href="/communities/irm/membership"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded text-sm transition-colors"
+            href="/account#community-membership"
+            className={buttonStyles("primary")}
           >
             Check Application Status
           </Link>
           <Link
             href={returnHref}
-            className="text-sm text-gray-600 hover:text-gray-900 hover:underline ml-2"
+            className={buttonStyles("quiet")}
           >
             &larr; Back to {returnLabel}
           </Link>
@@ -127,24 +128,24 @@ export default function AccessDeniedGuidance({
 
   if (membershipStatus === "REJECTED") {
     return (
-      <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl mx-auto mt-8">
-        <div className="inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 mb-3">
+      <div className="ui-surface max-w-2xl mx-auto my-6">
+        <div className="inline-block px-2.5 py-1 rounded-tag text-sm font-semibold bg-error-surface text-error border border-error-border mb-3">
           Application Rejected
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Membership Request Not Approved</h2>
-        <p className="text-gray-600 mb-6">
+        <h2 className="ui-section-heading text-text mb-2">Membership Request Not Approved</h2>
+        <p className="text-text-muted mb-6 text-base leading-6">
           Your previous IRM membership application was not approved. You can submit a new application with your correct student CNE through the membership page.
         </p>
         <div className="flex flex-wrap gap-3 items-center">
           <Link
-            href="/communities/irm/membership"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded text-sm transition-colors"
+            href="/account#community-membership"
+            className={buttonStyles("primary")}
           >
             Reapply for Membership
           </Link>
           <Link
             href={returnHref}
-            className="text-sm text-gray-600 hover:text-gray-900 hover:underline ml-2"
+            className={buttonStyles("quiet")}
           >
             &larr; Back to {returnLabel}
           </Link>
@@ -153,26 +154,43 @@ export default function AccessDeniedGuidance({
     );
   }
 
+  if (membershipStatus === "REMOVED" || membershipStatus === "BANNED" || (membershipStatus && membershipStatus !== "ACTIVE")) {
+    const removed = membershipStatus === "REMOVED";
+    const banned = membershipStatus === "BANNED";
+    return <div className="ui-surface max-w-2xl mx-auto my-6">
+      <h2 className="ui-section-heading text-text mb-2">{removed ? "Community Membership Ended" : banned ? "Community Access Restricted" : "Membership Status Unavailable"}</h2>
+      <p className="text-text-muted mb-6 text-base leading-6">{removed
+        ? "Your IRM community membership has ended. Your account remains available, and you may apply again."
+        : banned ? "Your IRM community access is restricted. Reapplication is unavailable. Contact Support for help."
+        : "Your current membership status does not grant community access. Check your membership status or contact Support."}</p>
+      <div className="flex flex-wrap gap-3">
+        {removed && <Link href="/account#community-membership" className={buttonStyles("primary")}>Reapply for Membership</Link>}
+        <Link href="/support" className={buttonStyles("quiet")}>Support</Link>
+        <Link href={returnHref} className={buttonStyles("quiet")}>Back to {returnLabel}</Link>
+      </div>
+    </div>;
+  }
+
   // No membership
   return (
-    <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl mx-auto mt-8">
-      <div className="inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 mb-3">
+    <div className="ui-surface max-w-2xl mx-auto my-6">
+      <div className="inline-block px-2.5 py-1 rounded-tag text-sm font-semibold bg-info-surface text-info border border-info-border mb-3">
         Membership Required
       </div>
-      <h2 className="text-xl font-bold text-gray-900 mb-2">Join the IRM Community</h2>
-      <p className="text-gray-600 mb-6">
-        This area requires active IRM membership. You have an account, but have not yet joined the IRM community. Submit your student CNE to request membership.
+      <h2 className="ui-section-heading text-text mb-2">Join the IRM Community</h2>
+      <p className="text-text-muted mb-6 text-base leading-6">
+        This area requires active IRM membership. You have an account, but have not yet joined the IRM community. Submit an application from your account to request membership.
       </p>
       <div className="flex flex-wrap gap-3 items-center">
         <Link
-          href="/communities/irm/membership"
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded text-sm transition-colors"
+          href="/account#community-membership"
+          className={buttonStyles("primary")}
         >
           Request IRM Membership
         </Link>
         <Link
           href={returnHref}
-          className="text-sm text-gray-600 hover:text-gray-900 hover:underline ml-2"
+          className={buttonStyles("quiet")}
         >
           &larr; Back to {returnLabel}
         </Link>

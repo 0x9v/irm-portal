@@ -1,355 +1,212 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { fetchApi, downloadApiFile, ApiError, API_URL } from "@/lib/api";
+import { fetchApi, downloadApiFile, ApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { validPendingFeed, safeExternalUrl, type PendingResourceItem } from "@/lib/moduleResources";
+import PendingResourcePreview from "@/components/modules/PendingResourcePreview";
+import ConfirmationDialog from "@/components/moderation/ConfirmationDialog";
 import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
+import PageContainer from "@/components/PageContainer";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import { ContentLoading, ContentEmpty } from "@/components/ContentState";
+import { buttonStyles } from "@/components/ui/Button";
+import { documentTypeLabel } from "@/lib/documentPresentation";
 
-type PendingDocument = {
-  id: string;
-  title: string;
-  type: string;
-  source: string;
-  status: string;
-  created_at: string;
-  module_id: string;
-  module_slug: string;
-  module_name: string;
-  is_uploader: boolean;
-  my_vote: string | null;
-  can_vote: boolean;
-  full_document_access: boolean;
-};
-
-type VoteConfirmation = {
-  docId: string;
-  title: string;
-  access: boolean;
-};
+type Notice = { message: string; kind: "success" | "error" | "warning"; download?: { id: string; title: string } };
+const base = "/api/v1/communities/irm/resources";
 
 export default function PendingDocumentsPage() {
-  const [docs, setDocs] = useState<PendingDocument[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, membership, membershipError, error: authError, isLoading: authLoading, isRefreshing, isLoggingOut, refresh } = useAuth();
+  const scope = !authLoading && !isRefreshing && !isLoggingOut && user && membership?.status === "ACTIVE" && !membershipError && !authError
+    ? `${user.id}:irm:${membership.id}` : null;
+  const scopeRef = useRef(scope);
+  const requestRef = useRef<AbortController | null>(null);
+  const requestNumber = useRef(0);
+  const actionRef = useRef<string | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const [items, setItems] = useState<PendingResourceItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [authStatus, setAuthStatus] = useState<number | null>(null);
-
+  const [denied, setDenied] = useState<number | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  
-  const previewUrlRef = useRef<string | null>(null);
-  const previewAbortController = useRef<AbortController | null>(null);
-  
-  const [submittingVote, setSubmittingVote] = useState<string | null>(null);
-  const [voteError, setVoteError] = useState<{id: string, msg: string} | null>(null);
-  
-  const [confirmations, setConfirmations] = useState<VoteConfirmation[]>([]);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
 
-  // We suppress react-hooks/set-state-in-effect here because the linter statically sees setLoading(true)
-  // being invoked, even though we skip it during the initial mount with the isInitial flag.
-  const loadDocs = useCallback(async (isInitial = false) => {
-    if (!isInitial) setLoading(true);
+  useEffect(() => { scopeRef.current = scope; }, [scope]);
+
+  const accessLost = useCallback((status = 403) => {
+    requestRef.current?.abort();
+    requestNumber.current++;
+    setItems([]); setCursor(null); setLoadedScope(null); setPreviewId(null);
+    setConfirmId(null); setNotice(null); setBlockedIds([]); setDenied(status);
+    void refresh();
+  }, [refresh]);
+  const previewAccessLost = useCallback((status: 401 | 403) => accessLost(status), [accessLost]);
+
+  const loadQueue = useCallback(async (next = false) => {
+    if (!scope || (next && !cursor)) return false;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const requestId = ++requestNumber.current;
+    if (next) setLoadingMore(true);
+    else { setLoading(true); setItems([]); setCursor(null); setLoadedScope(null); setPreviewId(null); }
     setError(null);
     try {
-      const data = await fetchApi<PendingDocument[]>("/api/v1/communities/irm/documents/pending");
-      setDocs(data);
-      setAuthStatus(200);
+      const query = new URLSearchParams({ limit: "20", ...(next && cursor ? { after: cursor } : {}) });
+      const data = await fetchApi<unknown>(`${base}/pending?${query}`, { signal: controller.signal, cache: "no-store" });
+      if (!validPendingFeed(data)) throw new Error("Invalid pending feed");
+      if (controller.signal.aborted || scopeRef.current !== scope || requestNumber.current !== requestId) return false;
+      setItems(current => next ? [...current, ...data.items.filter(item => !current.some(existing => existing.id === item.id))] : data.items);
+      setCursor(data.next_cursor); setLoadedScope(scope); setDenied(null); setBlockedIds([]);
+      return true;
     } catch (err) {
-      if (err instanceof ApiError) {
-        setAuthStatus(err.status);
-        if (err.status === 401 || err.status === 403) {
-          setDocs(null); // Clear docs and voting controls on auth error
-          setPreviewUrl(null);
-          setPreviewId(null);
-        }
-        
-        if (err.status === 401) {
-          setError("Unauthorized. Please log in to view pending documents.");
-        } else if (err.status === 403) {
-          setError("Active IRM membership is required to view pending documents.");
-        } else if (err.status === 404) {
-          setError("Community not found.");
-        } else {
-          setError(`Failed to load pending documents: ${err.message}`);
-        }
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An unexpected error occurred.");
-      }
+      if (controller.signal.aborted || scopeRef.current !== scope || requestNumber.current !== requestId) return false;
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) accessLost(err.status);
+      else setError(next && err instanceof ApiError && err.status === 404
+        ? "The pending cursor expired. Refresh the queue."
+        : "Pending resources could not be loaded. Refresh the queue to check their current state.");
+      return false;
     } finally {
-      setLoading(false);
+      if (requestNumber.current === requestId) { setLoading(false); setLoadingMore(false); }
     }
-  }, []);
+  }, [scope, cursor, accessLost]);
 
   useEffect(() => {
+    requestRef.current?.abort();
+    requestNumber.current++;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadDocs(true);
-    return () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-      if (previewAbortController.current) previewAbortController.current.abort();
-    };
-  }, [loadDocs]);
+    setItems([]); setCursor(null); setLoadedScope(null); setPreviewId(null);
+    setNotice(null); setConfirmId(null); setBlockedIds([]); setDenied(null);
+    if (scope) void loadQueue(false);
+    return () => { requestRef.current?.abort(); };
+    // A cursor change must not restart the queue.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]);
 
-  const handlePreview = async (docId: string) => {
-    if (previewAbortController.current) {
-      previewAbortController.current.abort();
-    }
-    const controller = new AbortController();
-    previewAbortController.current = controller;
-
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    
-    setPreviewId(docId);
-    setPreviewUrl(null);
-    previewUrlRef.current = null;
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setVoteError(null);
-
+  const runAction = async (item: PendingResourceItem, action: "vote" | "approve", vote?: "YES" | "NO") => {
+    if (!scope || loadedScope !== scope || actionRef.current || blockedIds.includes(item.id) ||
+      (action === "vote" ? !item.can_vote : !item.can_approve)) return;
+    actionRef.current = item.id;
+    setBusyId(item.id); setNotice(null); setConfirmError(null);
     try {
-      const response = await fetch(`${API_URL}/api/v1/documents/${docId}/preview`, { 
-        credentials: 'include',
-        signal: controller.signal
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to load preview: ${response.status}`);
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      setPreviewUrl(url);
-      previewUrlRef.current = url;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      if (err instanceof Error) {
-        setPreviewError(err.message);
+      const result = await fetchApi<unknown>(`${base}/${encodeURIComponent(item.id)}/${action}`, {
+        method: "POST", body: JSON.stringify(action === "vote" ? { vote } : {}), cache: "no-store",
+      }, 200);
+      if (scopeRef.current !== scope) return;
+      if (action === "vote") {
+        const reply = result as { vote?: unknown; full_resource_access?: unknown };
+        if (reply.vote !== vote || typeof reply.full_resource_access !== "boolean") throw new Error("Unconfirmed vote response");
+        setNotice({ kind: "success", message: `Vote recorded for “${item.title}”.`,
+          download: item.kind === "PDF" && reply.full_resource_access ? { id: item.id, title: item.title } : undefined });
       } else {
-        setPreviewError("Unexpected error loading preview.");
+        const reply = result as { id?: unknown; status?: unknown };
+        if (reply.id !== item.id || reply.status !== "APPROVED") throw new Error("Unconfirmed approval response");
+        setConfirmId(null);
+        setNotice({ kind: "success", message: `“${item.title}” was approved.` });
+      }
+      if (!await loadQueue(false) && scopeRef.current === scope) {
+        setBlockedIds(current => [...current, item.id]);
+        setNotice({ kind: "warning", message: "The action was recorded, but the queue could not refresh. Refresh before another action." });
+      }
+    } catch (err) {
+      if (scopeRef.current !== scope) return;
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) { accessLost(err.status); return; }
+      setBlockedIds(current => [...current, item.id]);
+      if (err instanceof ApiError && err.status === 409) {
+        setConfirmId(null);
+        setNotice({ kind: "warning", message: "This resource changed or your action is no longer available. The queue is refreshing." });
+        await loadQueue(false);
+      } else {
+        const message = "The outcome could not be confirmed. Refresh the queue before choosing another action; it may already have completed.";
+        setNotice({ kind: "warning", message });
+        if (action === "approve") setConfirmError(message);
       }
     } finally {
-      if (previewAbortController.current === controller) {
-        setPreviewLoading(false);
-      }
+      actionRef.current = null;
+      if (scopeRef.current === scope) setBusyId(null);
     }
   };
 
-  const handleVote = async (docId: string, voteValue: string) => {
-    setSubmittingVote(docId);
-    setVoteError(null);
-    try {
-      const data = await fetchApi<{ vote: string; full_document_access: boolean }>(
-        `/api/v1/documents/${docId}/vote`,
-        {
-          method: "POST",
-          body: JSON.stringify({ vote: voteValue }),
-        }
-      );
-      
-      const docTitle = docs?.find(d => d.id === docId)?.title || "Document";
-      
-      setConfirmations(prev => {
-        // Remove existing confirmation for this doc if it somehow exists
-        const filtered = prev.filter(c => c.docId !== docId);
-        return [...filtered, { docId, title: docTitle, access: data.full_document_access }];
-      });
-
-      await loadDocs(false);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 409) {
-          setVoteError({ id: docId, msg: "Voting is no longer available or you have already voted." });
-          await loadDocs(false);
-        } else if (err.status === 401 || err.status === 403) {
-          await loadDocs(false);
-        } else {
-          setVoteError({ id: docId, msg: err.message });
-        }
-      } else if (err instanceof Error) {
-        setVoteError({ id: docId, msg: err.message });
-      }
-    } finally {
-      setSubmittingVote(null);
+  const download = async (id: string, title: string) => {
+    try { await downloadApiFile(`/api/v1/documents/${encodeURIComponent(id)}/download`, title); }
+    catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) accessLost(err.status);
+      else { setNotice({ kind: "error", message: "The PDF could not be downloaded. Refresh the queue to check access." });
+        if (err instanceof ApiError && err.status === 404) void loadQueue(false); }
     }
   };
+  const visible = scope && loadedScope === scope && !denied;
+  const confirming = visible ? items.find(item => item.id === confirmId && item.can_approve) : null;
 
-  const handleDownload = async (docId: string, title: string) => {
-    try {
-      await downloadApiFile(`/api/v1/documents/${docId}/download`, title);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        alert("This document is no longer accessible.");
-        await loadDocs(false);
-      } else {
-        alert("Download failed.");
-      }
-    }
-  };
-
-  return (
-    <main className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
-      {/* Breadcrumb Navigation */}
-      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
-        <Link href="/" className="hover:text-gray-900 hover:underline">
-          IRM Hub
-        </Link>
-        <span>/</span>
-        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
-          Modules
-        </Link>
-        <span>/</span>
-        <span className="text-gray-900 font-medium">Pending Review</span>
-      </nav>
-
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pending Documents</h1>
-          <p className="text-sm text-gray-500 mt-1">Review and verify student resource submissions.</p>
-        </div>
-        <div className="flex gap-4 items-center">
-          <Link href="/communities/irm/modules" className="text-blue-600 hover:underline text-sm font-medium">
-            Back to Modules
-          </Link>
-          <button onClick={() => loadDocs(false)} className="text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-2.5 py-1 text-sm hover:bg-gray-50">
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      {confirmations.length > 0 && (
-        <div className="mb-6 space-y-3">
-          {confirmations.map(conf => (
-            <div key={conf.docId} className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
-              <div>
-                <p className="text-green-800 font-medium">Vote successfully recorded for &quot;{conf.title}&quot;.</p>
-                {!conf.access && <p className="text-sm text-green-700">The document is no longer in the pending queue.</p>}
-              </div>
-              {conf.access && (
-                <button
-                  onClick={() => handleDownload(conf.docId, conf.title)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium text-sm"
-                >
-                  Download Original
-                </button>
-              )}
+  return <PageContainer width="wide">
+    <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Pending Resources" }]} />
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div><p className="ui-eyebrow">IRM / Study resources</p><h1 className="ui-page-heading">Pending Resources</h1>
+        <p className="ui-helper mt-1">Review student submissions across modules.</p></div>
+      <div className="flex flex-wrap gap-3"><Link href="/communities/irm/modules" className={buttonStyles("quiet")}>← Back to Modules</Link>
+        {scope && <button type="button" onClick={() => void loadQueue(false)} disabled={loading || loadingMore || !!busyId}
+          className={buttonStyles("secondary")}>Refresh queue</button>}</div>
+    </div>
+    {notice && visible && <div className="mb-4 space-y-2"><FeedbackMessage type={notice.kind} message={notice.message}
+      onRetry={notice.kind !== "success" ? () => void loadQueue(false) : undefined} retryLabel="Refresh queue" />
+      {notice.download && visible && <button type="button" onClick={() => void download(notice.download!.id, notice.download!.title)}
+        className={buttonStyles("secondary")}>Download Original</button>}</div>}
+    {authLoading || isRefreshing && !scope ? <ContentLoading label="Checking access…" kind="document" count={2} />
+      : !user || denied === 401 ? <AccessDeniedGuidance isGuest returnHref="/communities/irm/modules" returnLabel="Modules" />
+      : !scope || denied === 403 ? <AccessDeniedGuidance membershipStatus={membership?.status ?? "PENDING"} returnHref="/communities/irm/modules" returnLabel="Modules" />
+      : loading && !visible ? <ContentLoading label="Loading pending resources…" kind="document" count={2} />
+      : error && !visible ? <FeedbackMessage type="error" message={error} onRetry={() => void loadQueue(false)} retryLabel="Refresh queue" />
+      : visible && items.length === 0 ? <ContentEmpty title="No pending resources to review." description="New student submissions will appear here." />
+      : visible && <div className="space-y-5">
+        {items.map(item => {
+          const outbound = item.kind === "YOUTUBE" || item.kind === "LINK" ? safeExternalUrl(item) : null;
+          const locked = !!busyId || blockedIds.includes(item.id) || loading || loadingMore;
+          return <article key={item.id} className="ui-surface space-y-4">
+            <div><p className="ui-eyebrow">{item.kind === "PDF" ? "Document" : item.kind === "IMAGE" ? "Image" : item.kind === "YOUTUBE" ? "YouTube" : "Useful link"}</p>
+              <h2 className="text-lg font-bold break-words">{item.title}</h2>{item.description && <p className="mt-1 break-words text-sm text-text-subtle">{item.description}</p>}</div>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-text-subtle">
+              <span>Module: <Link className="ui-link" href={`/communities/irm/modules/${encodeURIComponent(item.module_slug)}?from=pending`}>{item.module_name}</Link></span>
+              {item.kind === "PDF" && <span>Type: {documentTypeLabel(item.document_type ?? "")}</span>}
+              <span>Submitted: <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleDateString()}</time></span>
+              {item.is_uploader && <span>Your upload · voting unavailable</span>}{item.my_vote && <span>You voted: {item.my_vote}</span>}
             </div>
-          ))}
-        </div>
-      )}
-
-      {loading && !docs ? (
-        <div className="text-gray-500 py-8">Loading pending documents...</div>
-      ) : error ? (
-        authStatus === 401 ? (
-          <AccessDeniedGuidance isGuest={true} returnHref="/communities/irm/modules" returnLabel="Modules" />
-        ) : authStatus === 403 ? (
-          <AccessDeniedGuidance membershipStatus="PENDING" returnHref="/communities/irm/modules" returnLabel="Modules" />
-        ) : (
-          <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg flex flex-col gap-2 items-start">
-            <span>{error}</span>
-            <button onClick={() => loadDocs(false)} className="mt-2 bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded text-sm">Retry</button>
-          </div>
-        )
-      ) : docs?.length === 0 ? (
-        <div className="text-gray-600">No pending documents to review.</div>
-      ) : (
-        <div className="space-y-6">
-          {docs?.map((doc) => (
-            <div key={doc.id} className="p-5 border border-gray-200 rounded-lg shadow-sm bg-white">
-              <h2 className="text-xl font-semibold mb-2">{doc.title}</h2>
-              <div className="grid grid-cols-2 gap-2 text-sm text-gray-700 mb-4">
-                <p><span className="font-medium">Module:</span> {doc.module_name}</p>
-                <p><span className="font-medium">Type:</span> {doc.type}</p>
-                <p><span className="font-medium">Status:</span> {doc.status}</p>
-                <p><span className="font-medium">Date:</span> {new Date(doc.created_at).toLocaleDateString()}</p>
-              </div>
-
-              {doc.is_uploader && (
-                <div className="mb-4 inline-block bg-blue-50 text-blue-800 px-3 py-1 rounded text-sm font-medium border border-blue-200">
-                  Your upload - Voting disabled
-                </div>
-              )}
-
-              {doc.my_vote && (
-                <div className="mb-4 inline-block bg-gray-50 text-gray-800 px-3 py-1 rounded text-sm font-medium border border-gray-200">
-                  You voted: {doc.my_vote}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-3 items-center">
-                <button
-                  onClick={() => handlePreview(doc.id)}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded font-medium text-sm border border-gray-300"
-                >
-                  {previewId === doc.id && previewLoading ? "Loading preview..." : "Load Preview"}
-                </button>
-                
-                {doc.full_document_access && (
-                  <button
-                    onClick={() => handleDownload(doc.id, doc.title)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium text-sm"
-                  >
-                    Download Original
-                  </button>
-                )}
-              </div>
-
-              {previewId === doc.id && (
-                <div className="mt-4 border-t pt-4">
-                  <h3 className="text-lg font-medium mb-2">First Page Preview</h3>
-                  {previewLoading && <div className="text-gray-500 text-sm">Loading protected preview...</div>}
-                  {previewError && (
-                    <div className="text-red-600 text-sm">
-                      {previewError} <button onClick={() => handlePreview(doc.id)} className="underline ml-2">Retry</button>
-                    </div>
-                  )}
-                  {previewUrl && !previewLoading && (
-                    <div className="mb-4">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={previewUrl} alt={`Preview of ${doc.title}`} className="max-w-full h-auto border rounded shadow-sm" />
-                      <p className="text-xs text-gray-500 mt-2 italic">This is only the first-page preview.</p>
-                    </div>
-                  )}
-
-                  {previewUrl && !previewLoading && doc.can_vote && !doc.is_uploader && (
-                    <div className="bg-gray-50 p-4 rounded border mt-4">
-                      <p className="font-medium text-gray-900 mb-2">Is this document relevant to this module&apos;s studies?</p>
-                      <p className="text-xs text-gray-600 mb-4 space-y-1">
-                        &bull; One vote per document. The vote cannot be changed.<br/>
-                        &bull; YES may unlock the full document while it is pending.<br/>
-                        &bull; Community votes determine final acceptance.
-                      </p>
-                      
-                      {voteError?.id === doc.id && (
-                        <div className="text-red-600 text-sm mb-3 bg-red-50 p-2 rounded">{voteError.msg}</div>
-                      )}
-                      
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => handleVote(doc.id, "YES")}
-                          disabled={submittingVote === doc.id}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium disabled:opacity-50"
-                        >
-                          {submittingVote === doc.id ? "Submitting..." : "YES — relevant"}
-                        </button>
-                        <button
-                          onClick={() => handleVote(doc.id, "NO")}
-                          disabled={submittingVote === doc.id}
-                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium disabled:opacity-50"
-                        >
-                          {submittingVote === doc.id ? "Submitting..." : "NO — not relevant"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+            <div className="flex flex-wrap gap-3">
+              {(item.kind === "PDF" || item.kind === "IMAGE") && <button type="button" onClick={() => setPreviewId(current => current === item.id ? null : item.id)}
+                className={buttonStyles("secondary")}>{previewId === item.id ? "Hide preview" : "Load preview"}</button>}
+              {outbound && <a href={outbound} target="_blank" rel="noopener noreferrer" className={buttonStyles("secondary")}>
+                {item.kind === "YOUTUBE" ? "Open on YouTube" : `Open ${new URL(outbound).hostname}`}</a>}
+              {item.kind === "PDF" && item.full_resource_access && <button type="button" onClick={() => void download(item.id, item.title)}
+                className={buttonStyles("secondary")}>Download Original</button>}
             </div>
-          ))}
-        </div>
-      )}
-    </main>
-  );
+            {previewId === item.id && (item.kind === "PDF" || item.kind === "IMAGE") &&
+              <PendingResourcePreview key={`${scope}:${item.id}`} item={item} onAccessLost={previewAccessLost} />}
+            {(item.can_vote || item.can_approve) && <div className="flex flex-wrap gap-3 border-t border-border pt-4">
+              {item.can_vote && <><button type="button" disabled={locked} aria-busy={busyId === item.id} onClick={() => void runAction(item, "vote", "YES")}
+                className={buttonStyles("primary")}>YES — relevant</button>
+                <button type="button" disabled={locked} aria-busy={busyId === item.id} onClick={() => void runAction(item, "vote", "NO")}
+                  className={buttonStyles("secondary")}>NO — not relevant</button></>}
+              {item.can_approve && <button type="button" disabled={locked} onClick={() => { setConfirmError(null); setConfirmId(item.id); }}
+                className={buttonStyles("secondary")}>Approve resource</button>}
+            </div>}
+          </article>;
+        })}
+        {cursor && <button type="button" onClick={() => void loadQueue(true)} disabled={loadingMore || loading || !!busyId}
+          className={buttonStyles("secondary")}>{loadingMore ? "Loading more…" : "Load more resources"}</button>}
+        {error && <FeedbackMessage type="error" message={error} onRetry={() => void loadQueue(false)} retryLabel="Refresh queue" />}
+      </div>}
+    {confirming && <ConfirmationDialog title="Approve resource" heading="Approve this resource?"
+      context={confirming.title} description="Publish this student resource to the community immediately. Existing votes remain recorded."
+      pending={busyId === confirming.id} error={confirmError} onCancel={() => setConfirmId(null)}
+      onConfirm={() => void runAction(confirming, "approve")}
+      onCheck={async () => { if (await loadQueue(false)) setConfirmId(null); }} />}
+  </PageContainer>;
 }

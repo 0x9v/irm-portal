@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { formatFormError, FormErrors } from "@/lib/validation";
+import AccountPage from "@/components/auth/AccountPage";
+import styles from "@/components/auth/AccountPage.module.css";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import Button, { PendingLabel } from "@/components/ui/Button";
 
 type UserResponse = {
   id: string;
@@ -17,7 +21,12 @@ type UserResponse = {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { refresh } = useAuth();
+  const { refresh, passwordChangedNotice, consumePasswordChangedNotice } = useAuth();
+  const [showPasswordChangedNotice] = useState(passwordChangedNotice);
+
+  useEffect(() => {
+    if (showPasswordChangedNotice) consumePasswordChangedNotice();
+  }, [showPasswordChangedNotice, consumePasswordChangedNotice]);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -47,6 +56,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrors({ fields: {} });
     setLoading(true);
 
@@ -64,7 +74,7 @@ export default function LoginPage() {
       }
 
       // Navigate into the existing IRM membership page as default post-login destination
-      router.push("/communities/irm/membership");
+      router.push("/account#community-membership");
     } catch (err) {
       const formatted = formatFormError(err, "Login failed. Please check your credentials and try again.");
       setErrors(formatted);
@@ -73,34 +83,25 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="p-4 sm:p-8 font-sans max-w-md mx-auto mt-6 sm:mt-12">
-      <div className="mb-4">
-        <Link
-          href="/"
-          className="text-sm text-gray-500 hover:text-gray-800 hover:underline inline-flex items-center gap-1"
-        >
-          &larr; Back to IRM Hub
-        </Link>
+    <AccountPage kind="login" submitting={loading}>
+      <div className={styles.formIntro}>
+        <h1>Sign in</h1>
+        <p>Welcome back to EtudSup. Sign in with the email address you used to create your account.</p>
       </div>
 
-      <div className="p-6 sm:p-8 border border-gray-200 rounded-xl shadow-sm bg-white">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Log In</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          Sign in to access your IRM community account.
-        </p>
+        {showPasswordChangedNotice && <div className="mb-5">
+          <FeedbackMessage type="success" message="Password changed. Sign in with your new password." />
+        </div>}
 
         {errors.general && (
-          <div
-            role="alert"
-            className="p-3 mb-5 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg"
-          >
-            {errors.general}
+          <div className="mb-5">
+            <FeedbackMessage type="error" message={errors.general} />
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit} className={styles.form} noValidate>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="email">
+            <label className="ui-label" htmlFor="email">
               Email Address
             </label>
             <input
@@ -110,22 +111,23 @@ export default function LoginPage() {
               autoComplete="email"
               required
               disabled={loading}
-              className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                errors.fields.email ? "border-red-400 bg-red-50/50" : "border-gray-300"
-              }`}
+              className="ui-field"
+              aria-invalid={Boolean(errors.fields.email)}
+              aria-describedby={errors.fields.email ? "login-email-error" : "login-email-hint"}
               value={formData.email}
               onChange={handleChange}
-              placeholder="you@domain.com"
+              placeholder="e.g. sara@gmail.com"
             />
             {errors.fields.email && (
-              <p className="text-xs text-red-600 mt-1" role="alert">
+              <p id="login-email-error" className="ui-field-error" role="alert">
                 {errors.fields.email}
               </p>
             )}
+            {!errors.fields.email && <p id="login-email-hint" className={styles.fieldHint}>Any email provider works; use the address on your account.</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="password">
+            <label className="ui-label" htmlFor="password">
               Password
             </label>
             <input
@@ -135,35 +137,34 @@ export default function LoginPage() {
               autoComplete="current-password"
               required
               disabled={loading}
-              className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                errors.fields.password ? "border-red-400 bg-red-50/50" : "border-gray-300"
-              }`}
+              className="ui-field"
+              aria-invalid={Boolean(errors.fields.password)}
+              aria-describedby={errors.fields.password ? "login-password-error" : undefined}
               value={formData.password}
               onChange={handleChange}
             />
             {errors.fields.password && (
-              <p className="text-xs text-red-600 mt-1" role="alert">
+              <p id="login-password-error" className="ui-field-error" role="alert">
                 {errors.fields.password}
               </p>
             )}
           </div>
 
-          <button
+          <Button
             type="submit"
-            disabled={loading}
-            className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={loading} aria-busy={loading}
+            className="w-full mt-2"
           >
-            {loading ? "Logging in..." : "Log In"}
-          </button>
+            <PendingLabel pending={!!(loading)} idle="Sign in" busy="Signing in..." />
+          </Button>
         </form>
 
-        <div className="mt-6 pt-5 border-t border-gray-100 text-center text-sm text-gray-600">
+        <div className={styles.formAlt}>
           Don&apos;t have an account?{" "}
-          <Link href="/register" className="text-blue-600 hover:text-blue-800 font-medium hover:underline">
+          <Link href="/register">
             Create an account
           </Link>
         </div>
-      </div>
-    </main>
+    </AccountPage>
   );
 }

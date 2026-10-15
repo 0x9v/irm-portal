@@ -19,6 +19,12 @@ class Module(Base):
     community_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
     )
+    programme_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("programmes.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -34,7 +40,12 @@ class Module(Base):
     )
 
     community: Mapped["Community"] = relationship(back_populates="modules")
+    programme: Mapped["Programme | None"] = relationship(back_populates="modules")
 
     documents: Mapped[list["Document"]] = relationship(
         back_populates="module", cascade="all, delete-orphan"
     )
+    posts: Mapped[list["CommunityPost"]] = relationship(
+        secondary="post_modules", back_populates="modules"
+    )
+

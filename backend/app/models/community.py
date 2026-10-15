@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Integer, String, UniqueConstraint, Uuid, CheckConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -21,6 +21,12 @@ class Community(Base):
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
     document_vote_threshold: Mapped[int] = mapped_column(
         Integer, nullable=False, default=10, server_default="10"
+    )
+    programme_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("programmes.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -44,3 +50,12 @@ class Community(Base):
     announcements: Mapped[list["Announcement"]] = relationship(
         back_populates="community", cascade="all, delete-orphan"
     )
+    posts: Mapped[list["CommunityPost"]] = relationship(
+        back_populates="community", cascade="all, delete-orphan"
+    )
+    discussion_messages: Mapped[list["DiscussionMessage"]] = relationship(
+        back_populates="community", cascade="all, delete-orphan"
+    )
+
+    programme: Mapped["Programme | None"] = relationship(back_populates="communities")
+

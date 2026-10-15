@@ -13,7 +13,13 @@ def authenticate_user(db: Session, login_in: UserLogin) -> User:
     Returns the User object if successful.
     Raises an HTTPException (401) if authentication fails.
     """
-    user = db.query(User).filter(User.email == login_in.email).first()
+    # Hold the User lock through create_session's commit. A password change
+    # takes the same lock, so an old-password login cannot issue a session
+    # after the change has revoked all existing sessions.
+    user = (
+        db.query(User).filter(User.email == login_in.email)
+        .populate_existing().with_for_update().first()
+    )
     
     # Generic error message so we don't leak whether the email exists
     auth_exception = HTTPException(

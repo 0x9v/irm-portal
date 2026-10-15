@@ -54,7 +54,9 @@ def create_session(
     return raw_token, db_session
 
 
-def validate_session(db: DBSession, raw_token: str) -> Optional[Session]:
+def validate_session(
+    db: DBSession, raw_token: str, *, refresh: bool = False, lock: bool = False
+) -> Optional[Session]:
     """Validate a raw session credential and retrieve the corresponding Session.
 
     Args:
@@ -66,7 +68,12 @@ def validate_session(db: DBSession, raw_token: str) -> Optional[Session]:
     """
     token_hash = _hash_token(raw_token)
 
-    db_session = db.query(Session).filter(Session.token_hash == token_hash).first()
+    query = db.query(Session).filter(Session.token_hash == token_hash)
+    if refresh:
+        query = query.populate_existing()
+    if lock:
+        query = query.with_for_update()
+    db_session = query.first()
 
     if db_session is None:
         return None

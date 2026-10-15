@@ -8,6 +8,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from sqlalchemy.orm import Session
 from app.models.community import Community
 from app.models.module import Module
+from app.models.programme import Programme
 from app.database.session import SessionLocal
 
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +23,12 @@ def seed_db(db: Session) -> None:
     
     community = db.query(Community).filter_by(slug=community_slug).first()
     if not community:
-        community = Community(name=community_name, slug=community_slug)
+        programme = db.query(Programme).filter_by(slug=community_slug).first()
+        community = Community(
+            name=community_name,
+            slug=community_slug,
+            programme_id=programme.id if programme else None,
+        )
         db.add(community)
         db.commit()
         db.refresh(community)
@@ -42,6 +48,7 @@ def seed_db(db: Session) -> None:
         if not module:
             module = Module(
                 community_id=community.id,
+                programme_id=community.programme_id,
                 name=mod_data["name"],
                 slug=mod_data["slug"]
             )

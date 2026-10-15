@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
   },
   projects: [
@@ -19,15 +19,15 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'cd ../backend && POSTGRES_DB=irm_integration_test POSTGRES_USER=irm_test POSTGRES_PASSWORD=irm_test DATABASE_PORT=5432 DATABASE_HOST=127.0.0.1 STORAGE_ROOT=/tmp/irm_test_storage .venv/bin/uvicorn app.main:app --port 8000',
+      command: 'cd ../backend && POSTGRES_DB=irm_integration_test POSTGRES_USER=irm_test POSTGRES_PASSWORD=irm_test DATABASE_PORT=5432 DATABASE_HOST=127.0.0.1 STORAGE_ROOT=/home/yasso/irm-platform/test_storage .venv/bin/uvicorn app.main:app --port 8000',
       port: 8000,
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       timeout: 10000,
     },
     {
       command: 'npm run start',
       port: 3000,
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       timeout: 10000,
     }
   ],

@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models.community import Community
 from app.models.module import Module
-from app.models.document import Document, DocumentSource, DocumentStatus
+from app.models.document import Document, DocumentSource, DocumentStatus, ResourceKind
 from app.models.document_vote import DocumentVote, VoteValue
 from app.models.membership import Membership, MembershipStatus
 from app.models.user import User
@@ -173,7 +173,9 @@ def cast_document_vote(
         )
 
     # 3. Check document eligibility
-    if doc.status == DocumentStatus.APPROVED or doc.status == DocumentStatus.REJECTED or doc.source == DocumentSource.OFFICIAL:
+    if (doc.status == DocumentStatus.APPROVED or doc.status == DocumentStatus.REJECTED
+            or doc.source == DocumentSource.OFFICIAL or doc.storage_path is None
+            or doc.resource_kind not in (ResourceKind.PDF, ResourceKind.IMAGE)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Voting is only allowed on pending student documents."

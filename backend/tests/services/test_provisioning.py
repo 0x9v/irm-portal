@@ -127,7 +127,7 @@ def test_pending_membership_blocks_appointment(db_session):
     assert not success
     assert "pending membership request" in msg
 
-def test_active_membership_elsewhere_blocks_appointment(db_session):
+def test_active_membership_elsewhere_does_not_block_appointment(db_session):
     c1 = _create_community(db_session, "other")
     c2 = _create_community(db_session, "target")
     u = _create_user(db_session, "otheru")
@@ -135,8 +135,9 @@ def test_active_membership_elsewhere_blocks_appointment(db_session):
     db_session.add(m)
     db_session.commit()
     success, msg = appoint_delegate(db_session, c2.slug, str(u.id), cne="CNE_NEW", apply=True)
-    assert not success
-    assert "membership in another community" in msg
+    assert success
+    assert "Created new" in msg
+    assert db_session.query(Membership).filter_by(user_id=u.id).count() == 2
 
 def test_existing_different_delegate_blocks_appointment(db_session):
     c = _create_community(db_session, "diffdel")

@@ -1,0 +1,20 @@
+.loading { min-width: 0; }
+.loadingLabel { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; line-height: 20px; }
+.stack { display: grid; gap: 12px; }
+.skeleton { display: grid; gap: 10px; min-width: 0; padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
+.skeleton span { display: block; height: 10px; border-radius: var(--radius-tag); background: var(--surface-secondary); }
+.shortLine { width: 24%; }
+.longLine { width: 78%; }
+.mediumLine { width: 53%; }
+.announcement { min-height: 146px; padding: 24px; }
+.announcement .longLine { height: 21px; width: 64%; }
+.module { min-height: 96px; }
+.module .longLine { width: 70%; }
+.document { min-height: 130px; }
+.empty { min-width: 0; padding: 26px 20px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); text-align: center; overflow-wrap: anywhere; }
+.emptyIcon { display: grid; place-items: center; width: 36px; height: 36px; margin: 0 auto 10px; border: 1px solid var(--border); border-radius: 11px; color: var(--accent); background: var(--surface-secondary); }
+.emptyIcon svg { width: 20px; height: 20px; }
+.emptyTitle { color: var(--text); font-size: 15px; line-height: 22px; font-weight: 700; }
+.emptyDescription { max-width: 50ch; margin: 4px auto 0; color: var(--text-muted); font-size: 13px; line-height: 20px; }
+.emptyAction { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+@media (max-width: 390px) { .skeleton, .empty { padding-inline: 16px; } .emptyAction > * { max-width: 100%; } }

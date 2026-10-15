@@ -21,24 +21,22 @@ def make_integrity_error(orig):
 
 # --- Tests for PostgreSQL classification ---
 
-def test_pg_global_constraint_becomes_409():
-    """A. The global membership unique constraint becomes 409."""
-    orig = MockPsycopg2Error("duplicate key", constraint_name="uq_memberships_global_active_pending")
-    e = make_integrity_error(orig)
-    
-    with pytest.raises(HTTPException) as exc:
-        _handle_integrity_error(e)
-    assert exc.value.status_code == 409
-
-
 def test_pg_user_community_constraint_becomes_409():
-    """B. The user/community unique constraint becomes 409."""
+    """A. The one-row-per-community constraint becomes 409."""
     orig = MockPsycopg2Error("duplicate key", constraint_name="uq_memberships_user_community")
     e = make_integrity_error(orig)
     
     with pytest.raises(HTTPException) as exc:
         _handle_integrity_error(e)
     assert exc.value.status_code == 409
+
+
+def test_pg_retired_global_index_is_not_classified_as_current_conflict():
+    orig = MockPsycopg2Error("duplicate key", constraint_name="uq_memberships_global_active_pending")
+    e = make_integrity_error(orig)
+
+    with pytest.raises(IntegrityError):
+        _handle_integrity_error(e)
 
 
 def test_pg_unrelated_constraint_is_not_translated():
@@ -71,14 +69,13 @@ def test_pg_unidentified_error_is_not_translated():
 
 # --- Tests for SQLite classification ---
 
-def test_sqlite_user_id_uniqueness_failure():
-    """F. SQLite's exact user_id uniqueness failure is recognized."""
+def test_sqlite_retired_user_id_uniqueness_failure_is_not_classified():
+    """F. A retired global user-only index is not mapped as a pair conflict."""
     orig = Exception("UNIQUE constraint failed: memberships.user_id")
     e = make_integrity_error(orig)
     
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(IntegrityError):
         _handle_integrity_error(e)
-    assert exc.value.status_code == 409
 
 
 def test_sqlite_user_community_uniqueness_failure():

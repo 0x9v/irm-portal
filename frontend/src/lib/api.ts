@@ -7,11 +7,11 @@ export class ApiError extends Error {
   }
 }
 
-export async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function fetchApi<T>(path: string, options: RequestInit = {}, expectedStatus?: number, contentType: 'json' | 'none' = 'json'): Promise<T> {
   const url = `${API_URL}${path}`;
   
   const headers = new Headers(options.headers);
-  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+  if (contentType === 'json' && !headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -23,6 +23,9 @@ export async function fetchApi<T>(path: string, options: RequestInit = {}): Prom
       credentials: 'include',
     });
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     // Network failure
     throw new Error(`Network Error: ${(error as Error).message}`);
   }
@@ -45,6 +48,12 @@ export async function fetchApi<T>(path: string, options: RequestInit = {}): Prom
       // Ignore JSON parse errors for error responses
     }
     throw new ApiError(response.status, errorMessage, rawDetail);
+  }
+
+  // Callers with a status-specific mutation contract must not treat a different
+  // 2xx response as confirmation. The caller handles this as an unknown outcome.
+  if (expectedStatus !== undefined && response.status !== expectedStatus) {
+    throw new Error("Unexpected response status");
   }
 
   if (response.status === 204) {

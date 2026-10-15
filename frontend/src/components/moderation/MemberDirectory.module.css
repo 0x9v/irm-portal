@@ -1,0 +1,28 @@
+.page, .directory { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.heading { min-width: 0; }
+.heading h1 { margin-top: 4px; color: var(--text); font-size: clamp(24px, 4vw, 30px); font-weight: 750; line-height: 1.2; }
+.heading p:not(:first-child) { max-width: 70ch; margin-top: 8px; color: var(--text-muted); font-size: 14px; line-height: 1.55; }
+.heading a { margin-top: 16px; }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
+.filters label { color: var(--text); font-size: 14px; font-weight: 650; }
+.filters select { flex: 0 1 220px; min-width: 0; max-width: 100%; }
+.directoryToolbar { display: flex; justify-content: flex-end; }
+.empty { padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.memberRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
+.memberIdentity { display: flex; flex: 1 1 220px; align-items: center; gap: 13px; min-width: 0; }
+.initials { display: inline-flex; flex: 0 0 42px; align-items: center; justify-content: center; width: 42px; height: 42px; border: 1px solid var(--border); border-radius: 50%; background: var(--surface-secondary); color: var(--text); font-size: 13px; font-weight: 720; letter-spacing: .02em; }
+.memberText { min-width: 0; }
+.username { color: var(--text); font-size: 15px; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.meta span { padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--radius-tag); background: var(--surface-secondary); color: var(--text-muted); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.rowActions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; margin-left: auto; min-height: 44px; }
+.protected { color: var(--text-muted); font-size: 13px; }
+.actionDisclosure { position: relative; }
+.actionDisclosure summary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; min-width: 96px; cursor: pointer; list-style: none; }
+.actionDisclosure summary::-webkit-details-marker { display: none; }
+.actionDisclosure summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.actionPanel { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; display: flex; flex-direction: column; gap: 4px; width: max-content; min-width: 178px; max-width: min(240px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-popover); box-shadow: var(--shadow-dropdown); }
+.actionPanel button { width: 100%; min-height: 44px; justify-content: flex-start; }
+@media (max-width: 599px) { .filters { align-items: stretch; padding: 14px; } .filters label { width: 100%; } .filters select { flex: 1 1 100%; } .memberRow { padding: 14px; } }
+@media (prefers-reduced-motion: reduce) { .actionPanel { animation: none; } }

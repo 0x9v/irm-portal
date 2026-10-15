@@ -1,0 +1,30 @@
+.row {
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--surface);
+  box-shadow: none;
+  overflow-wrap: anywhere;
+  transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
+}
+.row:hover, .row:focus-within { border-color: var(--control-border); }
+.row:hover { background: color-mix(in srgb, var(--surface) 96%, var(--accent-soft)); }
+.header { display: flex; align-items: start; justify-content: space-between; gap: 12px; min-width: 0; }
+.copy { min-width: 0; flex: 1; }
+.title { margin: 0; color: var(--text); font-size: 16px; line-height: 1.45; font-weight: 700; overflow-wrap: anywhere; }
+.titleLink { color: inherit; border-radius: var(--radius-control); }
+.titleLink:hover { color: var(--accent); }
+.context { margin-top: 4px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.status { flex: none; max-width: 100%; }
+.metadata { display: flex; flex-wrap: wrap; gap: 3px 16px; margin-top: 10px; color: var(--text-muted); font-size: 13px; line-height: 1.5; min-width: 0; }
+.metadata > * { min-width: 0; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); min-width: 0; }
+.actions > * { max-width: 100%; }
+@media (max-width: 480px) {
+  .row { padding: 16px; }
+  .header { flex-wrap: wrap; }
+  .status { flex-basis: 100%; }
+  .actions > :is(a, button) { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .row { transition: none; } }

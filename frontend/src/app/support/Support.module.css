@@ -1,0 +1,41 @@
+.page { min-width: 0; }
+.page p { line-height: 1.65; overflow-wrap: anywhere; }
+.page h2 { margin: 0 0 12px; color: var(--text); font-size: 22px; line-height: 1.25; font-weight: 750; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.page h3 { color: var(--text); font-size: 15px; line-height: 22px; font-weight: 700; }
+.page :global(.ui-button) { max-width: 100%; }
+.hero { position: relative; isolation: isolate; display: flex; align-items: center; justify-content: space-between; gap: 32px; overflow: hidden; margin-bottom: 24px; padding: 38px 40px; border: 1px solid #39343f; border-radius: 26px; background: var(--brand-ink); color: #f8f6f8; }
+.hero::after { position: absolute; z-index: -1; content: ""; width: 450px; height: 450px; right: -280px; top: -290px; border-radius: 50%; background: radial-gradient(circle, rgb(177 158 229 / .27), transparent 70%); pointer-events: none; }
+.heroCopy { min-width: 0; max-width: 710px; }
+.eyebrow { margin: 0 0 18px; color: #d0c4e7; font-size: 11px; line-height: 18px; font-weight: 700; letter-spacing: .075em; text-transform: uppercase; }
+.page .hero h1 { margin: 0; color: #f8f6f8; font-size: clamp(34px, 4vw, 52px); line-height: 1.08; letter-spacing: -.05em; font-weight: 760; }
+.hero h1 span { color: #b9a7ef; }
+.heroHeading { margin: 16px 0 10px; font-size: 21px; font-weight: 650; letter-spacing: -.025em; }
+.heroLead { margin: 0; color: #d0cad7; font-size: 15px; }
+.heroNote { margin: 12px 0 0; color: #d0cad7; font-size: 13px; }
+.heroMark { display: grid; place-items: center; flex: none; width: 104px; height: 104px; border: 1px solid #5a5169; border-radius: 28px; background: rgb(185 167 239 / .08); color: #b9a7ef; transform: rotate(-7deg); }
+.heroMark svg { width: 48px; height: 48px; stroke-width: 1.5; }
+.contributionGrid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 24px; margin-bottom: 24px; }
+.card, .quietCard { min-width: 0; padding: 28px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
+.card > p, .quietCard > p, .nonFinancial p, .helpCopy > p { margin: 0 0 12px; color: var(--text-muted); font-size: 14px; }
+.card .kicker, .helpCopy .kicker { margin-bottom: 12px; color: var(--accent); font-size: 11px; line-height: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .075em; }
+.quietCard { background: var(--surface-secondary); }
+.cardIcon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 17px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--accent); }
+.cardIcon svg { width: 20px; height: 20px; }
+.actionArea { margin-top: 22px; }
+.contactButton { width: fit-content; }
+.page .caption { margin: 10px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.unavailable { margin-top: 22px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-secondary); font-size: 14px; line-height: 22px; }
+.unavailable strong { font-weight: 650; }
+.unavailable p { margin: 6px 0 0; color: var(--text-muted); font-size: 13px; }
+.card .accessNote { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; }
+.nonFinancial { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); }
+.nonFinancial h3 { margin: 0 0 9px; }
+.nonFinancial p { margin: 0; }
+.help { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; gap: 28px; }
+.helpCopy { min-width: 0; }
+.helpActions { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 12px; }
+.helpActions .caption { margin: 0; }
+.bottomActions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
+@media (max-width: 767px) { .hero { padding: 28px; gap: 20px; } .heroMark { display: none; } .contributionGrid, .help { grid-template-columns: minmax(0, 1fr); gap: 18px; } .card, .quietCard { padding: 24px; } }
+@media (max-width: 479px) { .hero { padding: 24px 20px; border-radius: 20px; } .heroHeading { font-size: 19px; } .card, .quietCard { padding: 22px 20px; } .page h2 { font-size: 20px; } .bottomActions { flex-direction: column; align-items: stretch; } .helpActions { align-items: stretch; } .contactButton { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .page :global(.ui-button) { transition: none; } }

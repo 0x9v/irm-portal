@@ -1,0 +1,3 @@
+.footer { flex: none; width: min(100%, 1260px); margin: auto auto 0; padding: 0 16px calc(24px + env(safe-area-inset-bottom, 0px)); color: var(--text-muted); background: var(--page); font-size: 12px; line-height: 20px; }
+.footer p { margin: 0; padding-top: 18px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+@media (min-width: 640px) { .footer { padding-inline: 32px; } }

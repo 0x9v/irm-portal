@@ -1,207 +1,114 @@
 "use client";
 
 import Link from "next/link";
+import PageContainer from "@/components/PageContainer";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import { IconDiscussion, IconModules, IconSupport, IconReview } from "@/components/navigation/NavIcons";
+import { buttonStyles } from "@/components/ui/Button";
+import { useAuth } from "@/context/AuthContext";
+import styles from "./Support.module.css";
 
-/**
- * Validates the WhatsApp contact number and builds a secure wa.me URL.
- * Expected format: 7 to 15 digits only (international country code + phone number),
- * without '+', spaces, dashes, or parentheses.
- * Returns null if missing, malformed, or invalid.
- */
-export function getWhatsAppSupportUrl(rawNumber: string | undefined): string | null {
-  if (!rawNumber) {
-    return null;
-  }
+/** Existing optional contact setting: international digits only, no payment processing. */
+function getWhatsAppSupportUrl(rawNumber: string | undefined, purpose: "contribution" | "help" = "contribution"): string | null {
+  if (!rawNumber) return null;
   const trimmed = rawNumber.trim();
-  // Strictly validate digits only, length between 7 and 15
-  if (!/^\d{7,15}$/.test(trimmed)) {
-    return null;
-  }
-  const message = "Hi! I'd like to support IRM Hub. How can I contribute?";
+  if (!/^\d{7,15}$/.test(trimmed)) return null;
+  const message = purpose === "help"
+    ? "Hi! I need help with my EtudSup account or IRM community access."
+    : "Hi! I'd like to support EtudSup. How can I contribute?";
   return `https://wa.me/${trimmed}?text=${encodeURIComponent(message)}`;
 }
 
 export default function SupportPage() {
-  const whatsAppNumber = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP_NUMBER;
-  const whatsAppUrl = getWhatsAppSupportUrl(whatsAppNumber);
+  const { user, membership, isLoading, isRefreshing, isLoggingOut, error, membershipError } = useAuth();
+  const signedIn = !!user && !isLoading && !isLoggingOut;
+  const confirmedGuest = !user && !isLoading && !isRefreshing && !isLoggingOut && !error;
+  const knownMembership = signedIn && !isRefreshing && !error && !membershipError;
+  const pending = knownMembership && membership?.status === "PENDING";
+  const restricted = knownMembership && !!membership && !["ACTIVE", "PENDING", "REJECTED", "REMOVED"].includes(membership.status);
+  const number = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP_NUMBER;
+  const contributionUrl = getWhatsAppSupportUrl(number);
+  const helpUrl = getWhatsAppSupportUrl(number, "help");
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 font-sans">
-      {/* Navigation Breadcrumbs */}
-      <nav aria-label="Breadcrumb" className="mb-6">
-        <ol className="flex items-center space-x-2 text-sm text-gray-500">
-          <li>
-            <Link href="/" className="hover:text-blue-600 transition-colors">
-              Home
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li className="text-gray-800 font-semibold" aria-current="page">
-            Support
-          </li>
-        </ol>
-      </nav>
+    <PageContainer width="wide" className={styles.page}>
+      <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Support" }]} />
 
-      {/* Hero / Page Header */}
-      <div className="mb-10 text-center sm:text-left border-b pb-8">
-        <div className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 mb-3">
-          Independent Student Project
+      <section className={styles.hero} aria-labelledby="support-heading">
+        <div className={styles.heroCopy}>
+          <p className={styles.eyebrow}>Student-built, community-supported</p>
+          <h1 id="support-heading">Support <span>EtudSup</span></h1>
+          <p className={styles.heroHeading}>Keep a shared place to learn.</p>
+          <p className={styles.heroLead}>EtudSup is an independent student project connecting study resources and student communities. IRM at FST Mohammedia is our first community.</p>
+          <p className={styles.heroNote}>If you would like to help sustain it, your support is welcome and always voluntary.</p>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight mb-3">
-          Support IRM Hub
-        </h1>
-        <p className="text-base sm:text-lg text-gray-600 max-w-2xl leading-relaxed">
-          IRM Hub helps IRM students share study resources, review student submissions, and follow community announcements.
-        </p>
-      </div>
+        <div className={styles.heroMark} aria-hidden="true"><IconDiscussion /></div>
+      </section>
 
-      <div className="space-y-8">
-        {/* Section: What Has Been Built */}
-        <section className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 shadow-sm">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            What We Have Built
-          </h2>
-          <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-            The platform provides essential tools to support our academic studies and community collaboration:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-              <span className="text-blue-600 font-bold text-lg mt-0.5">👤</span>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Student Accounts & Membership</h3>
-                <p className="text-xs text-gray-600 mt-1">
-                  Account registration and verified community membership workflows for IRM classmates.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-              <span className="text-blue-600 font-bold text-lg mt-0.5">📚</span>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Document Uploads & Previews</h3>
-                <p className="text-xs text-gray-600 mt-1">
-                  Study document uploads with automatic first-page previews to examine quality before voting.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-              <span className="text-blue-600 font-bold text-lg mt-0.5">🗳️</span>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Student Voting</h3>
-                <p className="text-xs text-gray-600 mt-1">
-                  Community peer review where active members vote to approve helpful academic resources.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-              <span className="text-blue-600 font-bold text-lg mt-0.5">📥</span>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Approved Document Library</h3>
-                <p className="text-xs text-gray-600 mt-1">
-                  Easy browsing and downloading of approved courses, tutorials, practicals, and exams by module.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-              <span className="text-blue-600 font-bold text-lg mt-0.5">📢</span>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Community Announcements</h3>
-                <p className="text-xs text-gray-600 mt-1">
-                  Timely updates, schedules, and important notices published by community representatives.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-              <span className="text-blue-600 font-bold text-lg mt-0.5">🛡️</span>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Delegate & Moderator Tools</h3>
-                <p className="text-xs text-gray-600 mt-1">
-                  Student leadership management tools to review memberships and maintain community standards.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Section: Why Support */}
-        <section className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 shadow-sm">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">
-            Supporting the Platform
-          </h2>
-          <div className="space-y-3 text-sm text-gray-700 leading-relaxed">
-            <p>
-              IRM Hub is an independent, student-built initiative. Contributions are completely optional and help with domain costs, maintenance, and future improvements.
-            </p>
-            <p>
-              The platform remains available under the same access rules whether a user contributes or not. Contributing does not grant special privileges, exclusive roles, or paid access to study resources.
-            </p>
-            <p className="text-xs text-gray-500 pt-2 border-t">
-              Note: IRM Hub is an independent student initiative and is not affiliated with, operated by, or officially endorsed by the university administration. It is not a registered charity, and contributions are not tax-deductible.
-            </p>
-          </div>
-        </section>
-
-        {/* Section: Contact / Contribution Action */}
-        <section className="bg-blue-50 border border-blue-200 rounded-xl p-6 sm:p-8 text-center sm:text-left">
-          <h2 className="text-xl font-bold text-blue-900 mb-2">
-            How to Contribute
-          </h2>
-          <p className="text-sm text-blue-800 mb-6 max-w-2xl leading-relaxed">
-            If you’d like to support the project, contact me on WhatsApp to discuss how you can contribute.
-          </p>
-
-          {whatsAppUrl ? (
-            <div className="space-y-4">
-              <div>
-                <a
-                  href={whatsAppUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-3 rounded-lg shadow-sm transition-colors text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-                >
-                  <span aria-hidden="true" className="text-lg">💬</span>
-                  Contact me to support IRM Hub
-                </a>
-              </div>
-              <div className="text-xs text-blue-700 space-y-1 max-w-xl">
-                <p>
-                  &bull; This link opens an external WhatsApp conversation.
-                </p>
-                <p>
-                  &bull; It does not charge you or process any automated payment.
-                </p>
-                <p>
-                  &bull; Contribution details are arranged personally.
-                </p>
-              </div>
+      <div className={styles.contributionGrid}>
+        <section className={styles.card} aria-labelledby="contribution-heading">
+          <p className={styles.kicker}>A voluntary contribution</p>
+          <h2 id="contribution-heading">Help keep EtudSup going</h2>
+          <p>Support helps with the project’s domain, ongoing maintenance, and improvements to the student experience.</p>
+          {contributionUrl ? (
+            <div className={styles.actionArea}>
+              <a href={contributionUrl} target="_blank" rel="noopener noreferrer" className={buttonStyles("primary", styles.contactButton)}>
+                <IconDiscussion />Contact us about supporting EtudSup
+              </a>
+              <p className={styles.caption}>Opens WhatsApp in a new tab to discuss contribution details. This conversation does not process a payment.</p>
             </div>
           ) : (
-            <div className="p-4 bg-white border border-blue-200 rounded-lg text-sm text-gray-700 max-w-lg">
-              <p className="font-medium text-gray-900">
-                Support contact details will be available soon.
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Thank you for your interest in supporting IRM Hub. You can also reach out directly to your student delegate.
-              </p>
+            <div className={styles.unavailable}>
+              <strong>Contribution details are not yet available.</strong>
+              <p>Thank you for wanting to help. There is no contribution action available on this page yet.</p>
             </div>
           )}
+          <p className={styles.accessNote}>Contributions do not affect membership approval, community roles, document access, or access decisions. The same rules apply to everyone.</p>
         </section>
 
-        {/* Section: Return Navigation Links */}
-        <section className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t">
-          <Link
-            href="/"
-            className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
-          >
-            &larr; Back to Homepage
-          </Link>
-          <Link
-            href="/communities/irm/modules"
-            className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
-          >
-            Explore IRM Modules &rarr;
-          </Link>
-        </section>
+        <aside className={styles.quietCard} aria-labelledby="sustain-heading">
+          <span className={styles.cardIcon} aria-hidden="true"><IconReview /></span>
+          <h2 id="sustain-heading">A little support, lasting care</h2>
+          <p>Maintaining EtudSup means keeping it available, fixing problems, and making it easier for students to find useful resources.</p>
+          <div className={styles.nonFinancial}>
+            <h3>More than financial support</h3>
+            <p>Share useful feedback with your community Delegate, report a problem, or contribute study resources through the existing community workflows when your access allows it.</p>
+          </div>
+        </aside>
       </div>
-    </div>
+
+      <section className={`${styles.card} ${styles.help}`} aria-labelledby="help-heading">
+        <div className={styles.helpCopy}>
+          <p className={styles.kicker}>Practical help</p>
+          <h2 id="help-heading">Need help with your account or community?</h2>
+          <p>Help is available independently of contributions.</p>
+          <p>{restricted
+            ? "Your IRM access is restricted. Ask your community Delegate about the restriction; contributing does not change that decision."
+            : pending
+              ? "Your IRM application is awaiting manual review by the community Delegate. Check its status before submitting another request."
+              : "IRM membership is manually verified by the community Delegate. If you have already applied, check your application status or ask your Delegate for guidance."}</p>
+          {!helpUrl && <p className={styles.caption}>Online contact details are not yet available. For IRM membership or access questions, reach your student Delegate through your usual community channels. You can also share technical issues with them.</p>}
+        </div>
+        <div className={styles.helpActions}>
+          {helpUrl && <>
+            <a href={helpUrl} target="_blank" rel="noopener noreferrer" className={buttonStyles("secondary")}><IconSupport />Contact for help on WhatsApp</a>
+            <p className={styles.caption}>Opens WhatsApp in a new tab for account, technical, or community help.</p>
+          </>}
+          {signedIn && !restricted && <Link href="/account#community-membership" className={buttonStyles("secondary")}><IconReview />{pending ? "Check application status" : "View IRM membership"}</Link>}
+          {confirmedGuest && <p className={styles.caption}>Sign in to check an existing membership application. If you cannot sign in, ask your community Delegate for guidance.</p>}
+        </div>
+      </section>
+
+      <nav aria-label="Support page navigation" className={styles.bottomActions}>
+        <Link href="/" className={buttonStyles("secondary")}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m10 6-6 6 6 6M4 12h16" /></svg>Back to Home
+        </Link>
+        {signedIn ? (
+          <Link href="/communities/irm/modules" className={buttonStyles("secondary")}><IconModules />Browse IRM modules</Link>
+        ) : confirmedGuest ? (
+          <Link href="/login" className={buttonStyles("secondary")}><IconSupport />Sign in</Link>
+        ) : null}
+      </nav>
+    </PageContainer>
   );
 }

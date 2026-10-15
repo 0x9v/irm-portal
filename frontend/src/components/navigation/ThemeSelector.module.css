@@ -1,0 +1,9 @@
+.toggle { flex: none; }
+.toggle svg { width: 20px; height: 20px; transform: rotate(-7deg); transition: transform var(--motion-fast) var(--motion-ease); }
+.toggle[aria-label="Switch to light mode"] svg { transform: rotate(7deg); }
+.toggle:hover svg { transform: rotate(-13deg); }
+.toggle[aria-label="Switch to light mode"]:hover svg { transform: rotate(13deg); }
+.systemAction { width: 100%; justify-content: flex-start; text-align: start; }
+.systemAction[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.systemIndicator { display: inline-grid; width: 18px; height: 18px; flex: none; place-items: center; border: 1px solid currentColor; border-radius: 6px; font-size: 12px; line-height: 1; font-weight: 750; }
+@media (prefers-reduced-motion: reduce) { .toggle svg, .toggle[aria-label="Switch to light mode"] svg, .toggle:hover svg, .toggle[aria-label="Switch to light mode"]:hover svg { transition: none; transform: none; } }

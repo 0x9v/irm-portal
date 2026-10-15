@@ -27,3 +27,42 @@ class AnnouncementResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AnnouncementDetailResponse(AnnouncementResponse):
+    author_username: str | None = None
+
+
+class AnnouncementReplyCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content_raw(cls, v: object) -> str:
+        if not isinstance(v, str):
+            raise ValueError("Content must be a string")
+        v = v.strip()
+        if not v:
+            raise ValueError("Content cannot be empty or whitespace only")
+        if len(v) > 2000:
+            raise ValueError("Content cannot exceed 2000 characters")
+        return v
+
+
+class AnnouncementReplyResponse(BaseModel):
+    id: UUID
+    announcement_id: UUID
+    author_username: str
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AnnouncementReplyListResponse(BaseModel):
+    items: list[AnnouncementReplyResponse]
+    next_cursor: UUID | None = None
+
+

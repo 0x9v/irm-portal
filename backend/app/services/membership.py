@@ -1,4 +1,5 @@
 import uuid
+from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -6,6 +7,7 @@ from datetime import datetime, timezone
 
 from app.models.community import Community
 from app.models.membership import Membership, MembershipStatus, MembershipRole
+from app.models.management_event import ManagementEvent
 from app.models.user import User
 
 
@@ -18,7 +20,6 @@ def _handle_integrity_error(e: IntegrityError):
     if diag is not None:
         constraint_name = getattr(diag, "constraint_name", None)
         if constraint_name in (
-            "uq_memberships_global_active_pending",
             "uq_memberships_user_community",
         ):
             raise HTTPException(
@@ -36,14 +37,8 @@ def _handle_integrity_error(e: IntegrityError):
             status_code=status.HTTP_409_CONFLICT,
             detail="Membership request could not be processed due to a conflict."
         )
-    if "UNIQUE constraint failed: memberships.user_id" in orig_str:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Membership request could not be processed due to a conflict."
-        )
-
     # For environments where driver metadata is missing but string matches PG constraints
-    if "uq_memberships_global_active_pending" in orig_str or "uq_memberships_user_community" in orig_str:
+    if "uq_memberships_user_community" in orig_str:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Membership request could not be processed due to a conflict."
@@ -55,7 +50,12 @@ def create_membership_request(
     db: Session,
     user: User,
     community_slug: str,
-    cne: str
+    cne: str | None,
+    applicant_type=None,
+    applicant_first_name: str | None = None,
+    applicant_family_name: str | None = None,
+    identifier_type=None,
+    promotion: str | None = None,
 ) -> Membership:
     # Acquire user lock to serialize operations for this applicant
     db.query(User).filter(User.id == user.id).with_for_update().first()
@@ -67,47 +67,42 @@ def create_membership_request(
             detail="Community not found"
         )
         
-    # Check for any active or pending membership globally
-    global_conflict = db.query(Membership).filter(
+    # Lifecycle conflicts are local to the requested community.
+    existing_membership = db.query(Membership).filter(
         Membership.user_id == user.id,
+        Membership.community_id == community.id,
         Membership.status.in_([MembershipStatus.PENDING, MembershipStatus.ACTIVE])
     ).first()
-    
-    if global_conflict:
-        if global_conflict.community_id == community.id:
-            if global_conflict.status == MembershipStatus.PENDING:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Membership request is already pending."
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="User is already an active member of this community."
-                )
-        else:
-            if global_conflict.status == MembershipStatus.PENDING:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="You already have a pending membership request in another community. It must be resolved or withdrawn first."
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Your active membership in another community prevents another application."
-                )
+
+    if existing_membership:
+        detail = (
+            "Membership request is already pending."
+            if existing_membership.status == MembershipStatus.PENDING
+            else "User is already an active member of this community."
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
                 
-    # Check if a rejected membership exists for this community
+    # Check if a prior membership exists for this community
     existing_membership = db.query(Membership).filter(
         Membership.user_id == user.id,
         Membership.community_id == community.id
     ).first()
     
     if existing_membership:
-        # We know it must be REJECTED because PENDING/ACTIVE would have been caught above.
+        if existing_membership.status == MembershipStatus.BANNED:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is banned from this community."
+            )
+        # REJECTED or REMOVED memberships can submit a fresh application
         existing_membership.status = MembershipStatus.PENDING
         existing_membership.role = MembershipRole.MEMBER
         existing_membership.cne = cne
+        existing_membership.applicant_type = applicant_type
+        existing_membership.applicant_first_name = applicant_first_name
+        existing_membership.applicant_family_name = applicant_family_name
+        existing_membership.identifier_type = identifier_type
+        existing_membership.promotion = promotion
         existing_membership.updated_at = datetime.now(timezone.utc)
         
         try:
@@ -123,6 +118,11 @@ def create_membership_request(
         user_id=user.id,
         community_id=community.id,
         cne=cne,
+        applicant_type=applicant_type,
+        applicant_first_name=applicant_first_name,
+        applicant_family_name=applicant_family_name,
+        identifier_type=identifier_type,
+        promotion=promotion,
         status=MembershipStatus.PENDING,
         role=MembershipRole.MEMBER
     )
@@ -171,17 +171,20 @@ def _review_membership(db: Session, community_slug: str, membership_id: str, new
         )
         
     if new_status == MembershipStatus.ACTIVE:
-        # Verify no other PENDING/ACTIVE membership exists (guarding against legacy inconsistent data)
-        global_conflict = db.query(Membership).filter(
+        # Keep approval checks local to this community. The pair constraint
+        # normally makes this defensive query empty, while preserving the
+        # same-community conflict contract for inconsistent legacy data.
+        community_conflict = db.query(Membership).filter(
             Membership.user_id == membership.user_id,
+            Membership.community_id == community.id,
             Membership.status.in_([MembershipStatus.PENDING, MembershipStatus.ACTIVE]),
             Membership.id != membership.id
         ).first()
-        
-        if global_conflict:
+
+        if community_conflict:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="User already has an active or pending membership."
+                detail="User already has an active or pending membership in this community."
             )
 
     membership.status = new_status
@@ -328,6 +331,11 @@ def get_pending_memberships(db: Session, community_slug: str, skip: int = 0, lim
                 status=membership.status,
                 role=membership.role,
                 cne=membership.cne,
+                applicant_type=membership.applicant_type,
+                applicant_first_name=membership.applicant_first_name,
+                applicant_family_name=membership.applicant_family_name,
+                identifier_type=membership.identifier_type,
+                promotion=membership.promotion,
                 created_at=membership.created_at,
                 updated_at=membership.updated_at,
                 username=user.username,
@@ -385,6 +393,18 @@ def withdraw_membership_request(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Membership is already rejected."
+        )
+
+    if membership.status == MembershipStatus.REMOVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Membership is already removed."
+        )
+
+    if membership.status == MembershipStatus.BANNED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Membership is banned."
         )
         
     try:
@@ -482,3 +502,278 @@ def transition_membership_role(db: Session, community_slug: str, membership_id: 
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to transition role")
         
     return membership
+
+
+def _delegate_member_mutation(
+    db: Session,
+    community_slug: str,
+    membership_id: str,
+    actor_user: User,
+    action: str,
+) -> None:
+    try:
+        m_uuid = UUID(membership_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+
+    community = db.query(Community).filter(Community.slug == community_slug).first()
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+
+    # Target lookup using BOTH community_id and membership_id
+    initial_target = db.query(Membership).filter(
+        Membership.id == m_uuid,
+        Membership.community_id == community.id,
+    ).first()
+    if not initial_target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+
+    # Protect leadership: The Delegate cannot remove or ban their own membership.
+    # These endpoints cannot remove or ban a DELEGATE membership.
+    if initial_target.user_id == actor_user.id or initial_target.role == MembershipRole.DELEGATE:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot alter DELEGATE membership")
+
+    # Consistent locking order: Target User -> Target Membership
+    db.query(User).filter(User.id == initial_target.user_id).with_for_update().first()
+
+    target_membership = db.query(Membership).filter(
+        Membership.id == m_uuid,
+        Membership.community_id == community.id,
+    ).populate_existing().with_for_update().first()
+
+    if not target_membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+
+    # Revalidate leadership protection under lock
+    if target_membership.user_id == actor_user.id or target_membership.role == MembershipRole.DELEGATE:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot alter DELEGATE membership")
+
+    # Revalidate acting Delegate authority within transaction
+    actor_membership = db.query(Membership).filter(
+        Membership.user_id == actor_user.id,
+        Membership.community_id == community.id,
+        Membership.status == MembershipStatus.ACTIVE,
+        Membership.role == MembershipRole.DELEGATE,
+    ).populate_existing().first()
+
+    if not actor_membership:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+
+    now = datetime.now(timezone.utc)
+
+    if action == "remove":
+        # REMOVE:
+        # ACTIVE, PENDING, or REJECTED -> REMOVED
+        # REMOVED -> 204, no additional event
+        # BANNED -> 409; removal must not bypass a ban
+        # DELEGATE -> 409
+        if target_membership.status == MembershipStatus.BANNED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot remove a banned member; removal must not bypass a ban."
+            )
+        if target_membership.status == MembershipStatus.REMOVED:
+            return  # Idempotent 204
+
+        target_membership.status = MembershipStatus.REMOVED
+        target_membership.role = MembershipRole.MEMBER
+        target_membership.updated_at = now
+        for p in list(target_membership.permissions):
+            db.delete(p)
+
+        db.add(
+            ManagementEvent(
+                community_id=community.id,
+                actor_id=actor_user.id,
+                action="remove",
+                target_type="membership",
+                target_id=target_membership.id,
+                created_at=now,
+            )
+        )
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+    elif action == "ban":
+        # BAN:
+        # ACTIVE, PENDING, REJECTED, or REMOVED -> BANNED
+        # BANNED -> 204, no additional event
+        # DELEGATE -> 409
+        if target_membership.status == MembershipStatus.BANNED:
+            return  # Idempotent 204
+
+        target_membership.status = MembershipStatus.BANNED
+        target_membership.role = MembershipRole.MEMBER
+        target_membership.updated_at = now
+        for p in list(target_membership.permissions):
+            db.delete(p)
+
+        db.add(
+            ManagementEvent(
+                community_id=community.id,
+                actor_id=actor_user.id,
+                action="ban",
+                target_type="membership",
+                target_id=target_membership.id,
+                created_at=now,
+            )
+        )
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+    elif action == "unban":
+        # UNBAN:
+        # BANNED -> REMOVED, requiring a fresh application
+        # REMOVED -> 204, no additional event
+        # ACTIVE, PENDING, or REJECTED -> 409; do not alter unrelated states
+        if target_membership.status == MembershipStatus.REMOVED:
+            return  # Idempotent 204
+        if target_membership.status != MembershipStatus.BANNED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Target membership is not banned."
+            )
+
+        target_membership.status = MembershipStatus.REMOVED
+        target_membership.role = MembershipRole.MEMBER
+        target_membership.updated_at = now
+        for p in list(target_membership.permissions):
+            db.delete(p)
+
+        db.add(
+            ManagementEvent(
+                community_id=community.id,
+                actor_id=actor_user.id,
+                action="unban",
+                target_type="membership",
+                target_id=target_membership.id,
+                created_at=now,
+            )
+        )
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+
+def remove_community_membership(db: Session, community_slug: str, membership_id: str, actor_user: User) -> None:
+    _delegate_member_mutation(db, community_slug, membership_id, actor_user, "remove")
+
+
+def ban_community_membership(db: Session, community_slug: str, membership_id: str, actor_user: User) -> None:
+    _delegate_member_mutation(db, community_slug, membership_id, actor_user, "ban")
+
+
+def unban_community_membership(db: Session, community_slug: str, membership_id: str, actor_user: User) -> None:
+    _delegate_member_mutation(db, community_slug, membership_id, actor_user, "unban")
+
+
+from sqlalchemy import or_, and_
+from app.schemas.membership import MembershipDirectoryResponse, MembershipDirectoryItem
+
+
+def list_community_memberships(
+    db: Session,
+    community_slug: str,
+    status_filter: MembershipStatus | None = None,
+    limit: int = 20,
+    after: UUID | None = None,
+) -> MembershipDirectoryResponse:
+    """
+    List community memberships ordered by created_at DESC, id DESC with keyset pagination.
+    Avoids N+1 queries by joining User and selecting minimal directory fields.
+    """
+    if not 1 <= limit <= 100:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Limit must be between 1 and 100",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    community = db.query(Community).filter(Community.slug == community_slug).first()
+    if not community:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Community not found",
+            headers={"Cache-Control": "private, no-store"},
+        )
+
+    cursor_mem = None
+    if after is not None:
+        cursor_mem = (
+            db.query(Membership.created_at, Membership.id, Membership.status)
+            .filter(
+                Membership.id == after,
+                Membership.community_id == community.id,
+            )
+            .first()
+        )
+        if not cursor_mem:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid pagination cursor",
+                headers={"Cache-Control": "private, no-store"},
+            )
+
+        if status_filter is not None and cursor_mem.status != status_filter:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pagination cursor does not match the requested status filter",
+                headers={"Cache-Control": "private, no-store"},
+            )
+
+    query = (
+        db.query(
+            Membership.id,
+            User.username,
+            Membership.status,
+            Membership.role,
+            Membership.created_at,
+            Membership.updated_at,
+        )
+        .join(User, Membership.user_id == User.id)
+        .filter(Membership.community_id == community.id)
+    )
+
+    if status_filter is not None:
+        query = query.filter(Membership.status == status_filter)
+
+    if after is not None and cursor_mem is not None:
+        query = query.filter(
+            or_(
+                Membership.created_at < cursor_mem.created_at,
+                and_(
+                    Membership.created_at == cursor_mem.created_at,
+                    Membership.id < cursor_mem.id,
+                ),
+            )
+        )
+
+    query = query.order_by(Membership.created_at.desc(), Membership.id.desc())
+
+    # Limit in SQL: fetch limit + 1 records to check if next page exists
+    results = query.limit(limit + 1).all()
+
+    has_next = len(results) > limit
+    page_items = results[:limit]
+    next_cursor = page_items[-1].id if has_next and page_items else None
+
+    items = [
+        MembershipDirectoryItem(
+            id=row.id,
+            username=row.username,
+            status=row.status,
+            role=row.role,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+        for row in page_items
+    ]
+
+    return MembershipDirectoryResponse(items=items, next_cursor=next_cursor)

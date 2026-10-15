@@ -1,378 +1,236 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { fetchApi, ApiError } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
-import { ModuleResponse } from "../../page";
-import { DocumentResponse } from "../page";
+import { useAuth, type SelfMembershipInfo } from "@/context/AuthContext";
+import type { ModuleResponse } from "@/components/modules/ModuleBrowserFrame";
 import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
+import PageContainer from "@/components/PageContainer";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import { buttonStyles } from "@/components/ui/Button";
+import {
+  draftError, fileError, submissionBody, validCreation, type ResourceCreated,
+  type ResourceDraft, type ResourceKind, type ResourceSource,
+} from "@/lib/moduleResourceSubmission";
 
 const DOCUMENT_TYPES = [
-  { value: "COURSE", label: "Course" },
-  { value: "TD", label: "TD (Tutorial)" },
-  { value: "TP", label: "TP (Practical)" },
-  { value: "EXAM", label: "Exam" },
-  { value: "SOLUTION", label: "Solution" },
-  { value: "OTHER", label: "Other" },
+  { value: "COURSE", label: "Course" }, { value: "TD", label: "TD (Tutorial)" },
+  { value: "TP", label: "TP (Practical)" }, { value: "EXAM", label: "Exam" },
+  { value: "SOLUTION", label: "Solution" }, { value: "OTHER", label: "Other" },
 ];
+const KINDS: { value: ResourceKind; label: string }[] = [
+  { value: "PDF", label: "Document" }, { value: "IMAGE", label: "Image" },
+  { value: "YOUTUBE", label: "YouTube" }, { value: "LINK", label: "Useful link" },
+];
+
+function emptyDraft(): ResourceDraft {
+  return { kind: "PDF", title: "", description: "", source: "STUDENT", documentType: "COURSE", file: null, url: "" };
+}
+
+function ResourceForm({ moduleSlug, mod, membership, officialAllowed }: {
+  moduleSlug: string; mod: ModuleResponse; membership: SelfMembershipInfo; officialAllowed: boolean;
+}) {
+  const [draft, setDraft] = useState<ResourceDraft>(emptyDraft);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "error" | "warning"; message: string } | null>(null);
+  const [created, setCreated] = useState<ResourceCreated | null>(null);
+  const [pending, setPending] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
+  const operationRef = useRef(false);
+  const controllerRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    controllerRef.current?.abort();
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+  }, []);
+
+  function changePreview(file: File | null) {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    const next = file ? URL.createObjectURL(file) : null;
+    previewRef.current = next;
+    setPreviewUrl(next);
+  }
+
+  function selectKind(kind: ResourceKind) {
+    if (operationRef.current || uncertain) return;
+    changePreview(null);
+    if (inputRef.current) inputRef.current.value = "";
+    setDraft(current => ({ ...current, kind, file: null, url: "" }));
+    setFeedback(null);
+  }
+
+  function selectFile(file: File | null) {
+    if (operationRef.current || uncertain || (draft.kind !== "PDF" && draft.kind !== "IMAGE")) return;
+    const error = file ? fileError(draft.kind, file) : null;
+    changePreview(error || draft.kind !== "IMAGE" ? null : file);
+    setDraft(current => ({ ...current, file: error ? null : file }));
+    setFeedback(error ? { type: "error", message: error } : null);
+    if (error && inputRef.current) inputRef.current.value = "";
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (operationRef.current || uncertain) return;
+    const error = draftError(draft);
+    if (error) { setFeedback({ type: "error", message: error }); return; }
+    if (draft.source === "OFFICIAL" && !officialAllowed) {
+      setFeedback({ type: "error", message: "Official submission is unavailable for this account." });
+      return;
+    }
+    operationRef.current = true;
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setPending(true);
+    setFeedback(null);
+    const submitted = { ...draft };
+    try {
+      const result = await fetchApi<ResourceCreated>(
+        `/api/v1/communities/irm/modules/${encodeURIComponent(moduleSlug)}/resources`,
+        { method: "POST", body: submissionBody(submitted), signal: controller.signal }, 201,
+      );
+      if (!validCreation(result, submitted, mod.id)) throw new Error("Unverified creation response");
+      if (controller.signal.aborted) return;
+      setCreated(result);
+      changePreview(null);
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      if (cause instanceof ApiError && cause.status < 500) {
+        const message = cause.status === 401 || cause.status === 403
+          ? "Your account cannot submit this resource. Check your access and try again."
+          : cause.status === 413 ? "The resource is too large. Check the file size."
+          : cause.status === 415 ? "The selected file or request format is unsupported."
+          : cause.status === 422 ? "The resource details were rejected. Check the fields and URL."
+          : "The resource could not be submitted. Check the details before trying again.";
+        setFeedback({ type: "error", message });
+      } else {
+        setUncertain(true);
+        setFeedback({ type: "warning", message: "Creation could not be confirmed. Your draft is kept here. Check your submissions before starting a new attempt; resending could create a duplicate." });
+      }
+    } finally {
+      if (!controller.signal.aborted) { operationRef.current = false; setPending(false); }
+    }
+  }
+
+  function reset() {
+    if (operationRef.current) return;
+    changePreview(null);
+    if (inputRef.current) inputRef.current.value = "";
+    setDraft(emptyDraft());
+    setCreated(null);
+    setFeedback(null);
+    setUncertain(false);
+  }
+
+  const locked = pending || uncertain;
+  const sourceOptions: ResourceSource[] = officialAllowed ? ["STUDENT", "OFFICIAL"] : ["STUDENT"];
+  const showSource = membership.role === "DELEGATE" || membership.role === "MODERATOR";
+
+  return <PageContainer width="default">
+    <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Modules", href: "/communities/irm/modules" },
+      { label: mod.name, href: `/communities/irm/modules/${moduleSlug}` }, { label: "Upload" }]} />
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0"><p className="ui-eyebrow">IRM / Study resources</p>
+        <h1 className="ui-page-heading text-text">Submit a resource</h1>
+        <p className="ui-helper break-words">Module: {mod.name}</p></div>
+      <Link href={`/communities/irm/modules/${moduleSlug}`} className={buttonStyles("quiet")}>← Back to {mod.name}</Link>
+    </div>
+    {created ? <div className="ui-surface space-y-4">
+      <FeedbackMessage type="success" message={created.status === "PENDING"
+        ? "Resource submitted for community review and voting. It is not published yet."
+        : "Official resource published."} />
+      <p className="text-sm text-text">{created.title}</p>
+      <button type="button" className={buttonStyles("secondary", "min-h-[44px]")} onClick={reset}>Submit another resource</button>
+    </div> : <form onSubmit={submit} className="ui-surface space-y-6 min-w-0" aria-busy={pending}>
+      <div className="rounded-control border border-border bg-surface-secondary p-4 text-sm text-text">
+        {draft.source === "STUDENT" ? "Student submissions enter community review and voting. Your resource is not published until approved, and you cannot vote on your own submission."
+          : "Official submissions publish immediately after confirmation."}
+      </div>
+      {feedback && <FeedbackMessage type={feedback.type} message={feedback.message} />}
+      {uncertain && <button type="button" className={buttonStyles("secondary", "min-h-[44px]")} onClick={() => setUncertain(false)}>
+        Edit draft for a new attempt
+      </button>}
+      <div><label className="ui-label" htmlFor="resource-kind">Resource kind</label>
+        <select id="resource-kind" className="ui-field min-h-[44px]" value={draft.kind} disabled={locked}
+          onChange={event => selectKind(event.target.value as ResourceKind)}>
+          {KINDS.map(kind => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
+        </select></div>
+      {showSource && <div><label className="ui-label" htmlFor="resource-source">Submit as</label>
+        <select id="resource-source" className="ui-field min-h-[44px]" value={draft.source} disabled={locked}
+          onChange={event => setDraft(current => ({ ...current, source: event.target.value as ResourceSource }))}>
+          {sourceOptions.map(source => <option key={source} value={source}>{source === "STUDENT" ? "Student contribution (review and voting)" : "Official (publish immediately)"}</option>)}
+        </select></div>}
+      <div><label className="ui-label" htmlFor="resource-title">Title</label>
+        <input id="resource-title" className="ui-field min-h-[44px]" required maxLength={255} value={draft.title} disabled={locked}
+          onChange={event => setDraft(current => ({ ...current, title: event.target.value }))} /></div>
+      <div><label className="ui-label" htmlFor="resource-description">Description <span className="text-text-subtle">(optional)</span></label>
+        <textarea id="resource-description" className="ui-field min-h-[88px]" maxLength={2000} value={draft.description} disabled={locked}
+          onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} /></div>
+      {draft.kind === "PDF" && <div><label className="ui-label" htmlFor="resource-type">Document type</label>
+        <select id="resource-type" className="ui-field min-h-[44px]" value={draft.documentType} disabled={locked}
+          onChange={event => setDraft(current => ({ ...current, documentType: event.target.value }))}>
+          {DOCUMENT_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+        </select></div>}
+      {(draft.kind === "PDF" || draft.kind === "IMAGE") && <div className="min-w-0">
+        <label className="ui-label" htmlFor="resource-file">{draft.kind === "PDF" ? "PDF file" : "Image file"}</label>
+        <input key={draft.kind} id="resource-file" ref={inputRef} type="file" required className="ui-field min-h-[44px] max-w-full"
+          accept={draft.kind === "PDF" ? ".pdf,application/pdf" : ".jpg,.jpeg,.png,image/jpeg,image/png"}
+          disabled={locked} onChange={event => selectFile(event.target.files?.[0] ?? null)} />
+        <p className="ui-helper mt-1">{draft.kind === "PDF" ? "PDF, up to 50 MiB." : "One JPEG or PNG image, up to 10 MiB. The server will create a safe static image."}</p>
+        {draft.file && <div className="mt-3 min-w-0 space-y-2"><p className="break-all text-sm text-text">Selected: {draft.file.name}</p>
+          {draft.kind === "IMAGE" && previewUrl && <figure className="max-w-full rounded-control border border-border bg-surface-secondary p-2">
+            {/* Local object URL is created only for the selected unsaved file. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewUrl} alt="Unsaved selected image preview" className="block h-auto max-h-80 max-w-full object-contain" />
+            <figcaption className="ui-helper mt-1">Unsaved preview on this device</figcaption>
+          </figure>}
+          <button type="button" className={buttonStyles("secondary", "min-h-[44px]")} disabled={locked}
+            onClick={() => { selectFile(null); if (inputRef.current) inputRef.current.value = ""; }}>Remove selected file</button>
+        </div>}
+      </div>}
+      {(draft.kind === "YOUTUBE" || draft.kind === "LINK") && <div>
+        <label className="ui-label" htmlFor="resource-url">{draft.kind === "YOUTUBE" ? "YouTube video URL" : "Useful link URL"}</label>
+        <input id="resource-url" type="url" className="ui-field min-h-[44px]" required maxLength={2048} value={draft.url} disabled={locked}
+          placeholder={draft.kind === "YOUTUBE" ? "https://www.youtube.com/watch?v=..." : "https://example.org/resource"}
+          onChange={event => setDraft(current => ({ ...current, url: event.target.value }))} />
+        <p className="ui-helper mt-1">{draft.kind === "YOUTUBE" ? "Use an HTTPS watch, shorts, or youtu.be video URL." : "Use a direct HTTPS link. No preview is fetched."}</p>
+      </div>}
+      <button type="submit" disabled={locked} aria-busy={pending} className={buttonStyles("primary", "w-full min-h-[44px]")}>
+        {pending ? "Submitting..." : "Submit resource"}
+      </button>
+    </form>}
+  </PageContainer>;
+}
 
 export default function UploadDocumentPage() {
   const params = useParams();
   const moduleSlug = params.moduleSlug as string;
-  
-  
-  const { user, membership, capabilities, isLoading: authLoading, refresh } = useAuth();
-
+  const { user, membership, capabilities, isLoading: authLoading } = useAuth();
   const [mod, setMod] = useState<ModuleResponse | null>(null);
-  const [loadingMod, setLoadingMod] = useState(true);
-  const [errorMod, setErrorMod] = useState<string | null>(null);
-
-  // Form states
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState("COURSE");
-  const [source, setSource] = useState("STUDENT");
-  const [file, setFile] = useState<File | null>(null);
-
-  // Submission state
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitSuccess, setSubmitSuccess] = useState<{ id: string, source: string } | null>(null);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loadedScope, setLoadedScope] = useState("");
+  const [moduleError, setModuleError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const scope = `${user?.id ?? ""}:irm:${membership?.id ?? ""}:${moduleSlug}`;
 
   useEffect(() => {
-    async function loadModule() {
-      if (!moduleSlug) return;
-      try {
-        const modData = await fetchApi<ModuleResponse>(`/api/v1/communities/irm/modules/${moduleSlug}`);
-        setMod(modData);
-      } catch (err) {
-        if (err instanceof ApiError) {
-          if (err.status === 404) setErrorMod("Module not found.");
-          else setErrorMod(`Failed to load module: ${err.message}`);
-        } else if (err instanceof Error) {
-          setErrorMod(err.message);
-        } else {
-          setErrorMod("Unexpected error loading module.");
-        }
-      } finally {
-        setLoadingMod(false);
-      }
-    }
-    loadModule();
-  }, [moduleSlug]);
+    if (authLoading || !user || membership?.status !== "ACTIVE") return;
+    const controller = new AbortController();
+    fetchApi<ModuleResponse>(`/api/v1/communities/irm/modules/${encodeURIComponent(moduleSlug)}`, { signal: controller.signal })
+      .then(data => { if (!controller.signal.aborted) { setMod(data); setLoadedScope(scope); setModuleError(null); } })
+      .catch(error => { if (!controller.signal.aborted) setModuleError(error instanceof ApiError && error.status === 404 ? "Module not found." : "Module could not be loaded."); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [moduleSlug, authLoading, user, membership, scope]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const selectedFile = e.target.files[0];
-      // Note: Backend limits are usually around 10MB to 50 MiB. Let's do a basic 50 MiB check just in case.
-      if (selectedFile.size > 50 * 1024 * 1024) {
-        setSubmitError("File is too large. Maximum size is 50 MiB.");
-        setFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
-      setFile(selectedFile);
-      setSubmitError(null);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file) {
-      setSubmitError("Please select a file.");
-      return;
-    }
-    if (!title.trim()) {
-      setSubmitError("Title cannot be empty.");
-      return;
-    }
-    if (membership?.status !== "ACTIVE") {
-      setSubmitError("You must have an ACTIVE membership to upload documents.");
-      return;
-    }
-    if (source === "OFFICIAL" && !capabilities?.upload_official_documents) {
-      setSubmitError("You do not have permission to upload official documents.");
-      return;
-    }
-
-    setSubmitting(true);
-    setSubmitError(null);
-    setSubmitSuccess(null);
-
-    const formData = new FormData();
-    formData.append("title", title.trim());
-    formData.append("type", type);
-    if (capabilities?.upload_official_documents) {
-      formData.append("source", source);
-    } else {
-      // If the caller is an ordinary member, the backend strictly requires omitting the source or explicitly setting it to STUDENT.
-      formData.append("source", "STUDENT");
-    }
-    formData.append("file", file);
-
-    try {
-      const result = await fetchApi<DocumentResponse>(`/api/v1/communities/irm/modules/${moduleSlug}/documents`, {
-        method: "POST",
-        body: formData,
-      });
-      setSubmitSuccess({ id: result.id, source: result.source });
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 401) {
-          setSubmitError("Unauthorized. Please log in.");
-        } else if (err.status === 403) {
-          setSubmitError(`Permission denied: ${err.message}`);
-          await refresh();
-        } else if (err.status === 413) {
-          setSubmitError(`File is too large: ${err.message}`);
-        } else if (err.status === 415) {
-          setSubmitError("Unsupported file format. Only PDF, JPEG, and PNG are allowed.");
-        } else if (err.status === 422) {
-          setSubmitError(`Validation error: ${err.message}`);
-        } else {
-          setSubmitError(`Upload failed: ${err.message}`);
-        }
-      } else if (err instanceof Error) {
-        setSubmitError(err.message === 'Failed to fetch' || err.message.includes('Network') 
-          ? "Network error: Upload completion could not be confirmed. Check the module or pending list before trying again." 
-          : err.message);
-      } else {
-        setSubmitError("An unexpected error occurred during upload.");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const resetForm = () => {
-    setTitle("");
-    setType("COURSE");
-    setSource("STUDENT");
-    setFile(null);
-    setSubmitSuccess(null);
-    setSubmitError(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  if (authLoading || loadingMod) {
-    return <div className="p-8 font-sans max-w-2xl mx-auto mt-10 text-gray-500">Loading module upload...</div>;
-  }
-
-  if (errorMod || !mod) {
-    return (
-      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6">
-        <AccessDeniedGuidance
-          isNotFound={true}
-          notFoundMessage={errorMod || "Module not found."}
-          returnHref="/communities/irm/modules"
-          returnLabel="Modules"
-        />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6">
-        <AccessDeniedGuidance
-          isGuest={true}
-          returnHref={`/communities/irm/modules/${moduleSlug}`}
-          returnLabel={mod.name}
-        />
-      </div>
-    );
-  }
-
-  if (!membership || membership.status !== "ACTIVE") {
-    return (
-      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6">
-        <AccessDeniedGuidance
-          membershipStatus={membership?.status}
-          returnHref={`/communities/irm/modules/${moduleSlug}`}
-          returnLabel={mod.name}
-        />
-      </div>
-    );
-  }
-
-  if (submitSuccess) {
-    return (
-      <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6 sm:mt-10">
-        <h1 className="text-2xl font-bold mb-6 text-gray-900">Upload to {mod.name}</h1>
-        <div className="p-6 bg-green-50 border border-green-200 text-green-800 rounded-xl">
-          <h2 className="text-lg font-semibold mb-2">Upload Successful</h2>
-          {submitSuccess.source === "STUDENT" ? (
-            <>
-              <p className="mb-4">Your document has been submitted for community voting.</p>
-              <p className="mb-4 text-sm text-green-700">Note: You cannot vote on your own submission.</p>
-              <div className="flex flex-wrap gap-3 items-center">
-                <Link href="/communities/irm/documents/pending" className="inline-block bg-white text-green-700 font-medium px-4 py-2 rounded-lg border border-green-300 hover:bg-green-100 text-sm transition-colors">
-                  View Pending Documents
-                </Link>
-                <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-sm text-green-800 hover:underline">
-                  &larr; Back to {mod.name}
-                </Link>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="mb-4">Your official document has been published immediately.</p>
-              <div className="flex flex-wrap gap-3 items-center">
-                <Link href={`/communities/irm/modules/${moduleSlug}/documents/${submitSuccess.id}`} className="inline-block bg-white text-green-700 font-medium px-4 py-2 rounded-lg border border-green-300 hover:bg-green-100 text-sm transition-colors">
-                  View Document
-                </Link>
-                <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-sm text-green-800 hover:underline">
-                  &larr; Back to {mod.name}
-                </Link>
-              </div>
-            </>
-          )}
-          <div className="mt-6 pt-4 border-t border-green-200">
-            <button type="button" onClick={resetForm} className="text-sm text-green-700 hover:underline font-medium">
-              Upload another document
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6 sm:mt-10">
-      {/* Breadcrumb Navigation */}
-      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
-        <Link href="/" className="hover:text-gray-900 hover:underline">
-          IRM Hub
-        </Link>
-        <span>/</span>
-        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
-          Modules
-        </Link>
-        <span>/</span>
-        <Link href={`/communities/irm/modules/${moduleSlug}`} className="hover:text-gray-900 hover:underline">
-          {mod.name}
-        </Link>
-        <span>/</span>
-        <span className="text-gray-900 font-medium">Upload</span>
-      </nav>
-
-      <div className="mb-6 flex justify-between items-center">
-        <Link href={`/communities/irm/modules/${moduleSlug}`} className="text-gray-500 hover:text-gray-900 hover:underline text-sm inline-block">
-          &larr; Back to {mod.name}
-        </Link>
-      </div>
-
-      <h1 className="text-2xl font-bold mb-1 text-gray-900">Upload Document</h1>
-      <p className="text-gray-500 text-sm mb-6">Module: <span className="font-semibold text-gray-800">{mod.name}</span></p>
-
-      <form onSubmit={handleSubmit} className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm space-y-6">
-        
-        {/* Source Explanation */}
-        <div className="p-4 bg-blue-50 border border-blue-100 text-blue-800 rounded text-sm space-y-2">
-          {source === "STUDENT" ? (
-            <>
-              <p><strong>Student contribution:</strong> This document will start in the pending queue.</p>
-              <p>Eligible community members will preview and vote to approve or reject it. The approval threshold is captured at the moment of upload.</p>
-              <p>You cannot vote on your own document.</p>
-            </>
-          ) : (
-            <p><strong>Official publication:</strong> This document will be published and available immediately.</p>
-          )}
-        </div>
-
-        {submitError && (
-          <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded text-sm">
-            {submitError}
-          </div>
-        )}
-
-        {capabilities?.upload_official_documents && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="source">
-              Upload As
-            </label>
-            <select
-              id="source"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={submitting}
-            >
-              <option value="STUDENT">Student Contribution (Requires Voting)</option>
-              <option value="OFFICIAL">Official Document (Immediate Publication)</option>
-            </select>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="title">
-            Title <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="title"
-            type="text"
-            required
-            maxLength={255}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={submitting}
-            placeholder="e.g. Chapter 1 Notes"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="type">
-            Document Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="type"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={submitting}
-          >
-            {DOCUMENT_TYPES.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="file">
-            File <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="file"
-            type="file"
-            required
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-            disabled={submitting}
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Accepted formats: PDF, JPEG, PNG.
-          </p>
-          {file && (
-            <p className="mt-2 text-sm text-gray-700 font-medium">
-              Selected: {file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)
-            </p>
-          )}
-        </div>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded disabled:opacity-50 flex justify-center items-center gap-2"
-        >
-          {submitting ? "Uploading..." : `Upload as ${source === "OFFICIAL" ? "Official" : "Student"}`}
-        </button>
-      </form>
-    </div>
-  );
+  if (authLoading) return <PageContainer width="default"><p role="status" className="ui-helper py-12">Loading account...</p></PageContainer>;
+  if (!user) return <PageContainer width="default"><AccessDeniedGuidance isGuest returnHref={`/communities/irm/modules/${moduleSlug}`} returnLabel="Module" /></PageContainer>;
+  if (!membership || membership.status !== "ACTIVE") return <PageContainer width="default"><AccessDeniedGuidance membershipStatus={membership?.status} returnHref={`/communities/irm/modules/${moduleSlug}`} returnLabel="Module" /></PageContainer>;
+  if (moduleError) return <PageContainer width="default"><AccessDeniedGuidance isNotFound notFoundMessage={moduleError} returnHref="/communities/irm/modules" returnLabel="Modules" /></PageContainer>;
+  if (loading || !mod || loadedScope !== scope) return <PageContainer width="default"><p role="status" className="ui-helper py-12">Loading module...</p></PageContainer>;
+  return <ResourceForm key={scope} moduleSlug={moduleSlug} mod={mod} membership={membership}
+    officialAllowed={Boolean(capabilities?.upload_official_documents)} />;
 }

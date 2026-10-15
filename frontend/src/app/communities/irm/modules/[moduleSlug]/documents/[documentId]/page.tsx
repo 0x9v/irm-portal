@@ -1,161 +1,207 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { fetchApi, downloadApiFile, ApiError } from "@/lib/api";
 import { DocumentResponse } from "../../page";
+import { ModuleResponse } from "../../../page";
 import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
+import PageContainer from "@/components/PageContainer";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import { buttonStyles } from "@/components/ui/Button";
+import {
+  documentSourceLabel,
+  documentTypeLabel,
+  isDocumentReturnContext,
+  moduleDocumentHref,
+  readModuleDocumentFilters,
+  type DocumentReturnContext,
+} from "@/lib/documentPresentation";
+
+import DocumentReader from "@/components/DocumentReader";
+import SavedDocumentButton from "@/components/SavedDocumentButton";
+import { useAuth } from "@/context/AuthContext";
 
 export default function DocumentDetailPage() {
+  const { user } = useAuth();
   const params = useParams();
   const moduleSlug = params.moduleSlug as string;
   const documentId = params.documentId as string;
 
   const [doc, setDoc] = useState<DocumentResponse | null>(null);
+  const [mod, setMod] = useState<ModuleResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [returnContext, setReturnContext] = useState<DocumentReturnContext>("module");
+  const [returnHref, setReturnHref] = useState(`/communities/irm/modules/${encodeURIComponent(moduleSlug)}`);
+  const [returnLabel, setReturnLabel] = useState("Back to module");
+  const [moduleHref, setModuleHref] = useState(`/communities/irm/modules/${encodeURIComponent(moduleSlug)}`);
 
   useEffect(() => {
-    async function loadDocument() {
-      if (!moduleSlug || !documentId) return;
-      
-      try {
-        const data = await fetchApi<DocumentResponse>(
-          `/api/v1/communities/irm/modules/${moduleSlug}/documents/${documentId}`
-        );
-        setDoc(data);
-      } catch (err) {
-        if (err instanceof ApiError) {
-          if (err.status === 401) {
-            setError("Unauthorized. Please log in to view this document.");
-          } else if (err.status === 404) {
-            setError("Document not found.");
-          } else {
-            setError(`Failed to load document: ${err.message}`);
-          }
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError("An unexpected error occurred.");
-        }
-      } finally {
-        setLoading(false);
-      }
+    const params = new URLSearchParams(window.location.search);
+    const rawContext = params.get("from");
+    const context = isDocumentReturnContext(rawContext) ? rawContext : "module";
+    // URL -> navigation state synchronization; the context is allowlisted above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReturnContext(context);
+    if (context === "mine") {
+      setReturnHref("/communities/irm/documents/mine");
+      setReturnLabel("Back to My Submissions");
+    } else if (context === "pending") {
+      setReturnHref("/communities/irm/documents/pending");
+      setReturnLabel("Back to Pending Documents");
+    } else {
+      const href = moduleDocumentHref(moduleSlug, readModuleDocumentFilters(window.location.search), "module",
+        params.get("kind") === "PDF" ? "PDF" : undefined);
+      setReturnHref(href);
+      setModuleHref(href);
+      setReturnLabel("Back to module documents");
     }
+  }, [moduleSlug]);
 
-    loadDocument();
+  const loadDocument = useCallback(async () => {
+    if (!moduleSlug || !documentId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch document and module info in parallel for safe, user-friendly labels
+      const [docData, modData] = await Promise.all([
+        fetchApi<DocumentResponse>(`/api/v1/communities/irm/modules/${moduleSlug}/documents/${documentId}`),
+        fetchApi<ModuleResponse>(`/api/v1/communities/irm/modules/${moduleSlug}`).catch(() => null),
+      ]);
+      setDoc(docData);
+      if (modData) setMod(modData);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setError("Unauthorized. Please log in to view this document.");
+        } else if (err.status === 404) {
+          setError("Document not found.");
+        } else {
+          setError("Document could not be loaded. Please try again.");
+        }
+      } else if (err instanceof Error) {
+        setError("Document could not be loaded. Please try again.");
+      } else {
+        setError("An unexpected error occurred.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [moduleSlug, documentId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadDocument();
+  }, [loadDocument]);
 
   const handleDownload = async () => {
     if (!doc) return;
     setDownloading(true);
     setDownloadError(null);
     try {
-      // The API uses the filename as the download name if we can't extract it from headers,
-      // but here we just use the title as the download filename.
-      // Usually the backend Content-Disposition header provides the real filename,
-      // but the HTML5 download attribute can set a fallback.
       await downloadApiFile(
         `/api/v1/communities/irm/modules/${moduleSlug}/documents/${documentId}/download`,
         doc.title
       );
-    } catch (err) {
-      if (err instanceof Error) {
-        setDownloadError(`Download failed: ${err.message}`);
-      } else {
-        setDownloadError("Download failed due to an unexpected error.");
-      }
+    } catch {
+      setDownloadError("Download could not be completed. Please try again.");
     } finally {
       setDownloading(false);
     }
   };
 
-  return (
-    <main className="p-4 sm:p-8 font-sans max-w-2xl mx-auto mt-6 sm:mt-10">
-      {/* Breadcrumb Navigation */}
-      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
-        <Link href="/" className="hover:text-gray-900 hover:underline">
-          IRM Hub
-        </Link>
-        <span>/</span>
-        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
-          Modules
-        </Link>
-        <span>/</span>
-        <Link href={`/communities/irm/modules/${moduleSlug}`} className="hover:text-gray-900 hover:underline">
-          {moduleSlug}
-        </Link>
-        {doc && (
-          <>
-            <span>/</span>
-            <span className="text-gray-900 font-medium truncate max-w-xs">{doc.title}</span>
-          </>
-        )}
-      </nav>
+  const moduleLabel = mod ? mod.name : "Module";
 
-      <div className="mb-6 flex flex-wrap justify-between items-center gap-2">
-        <Link 
-          href={`/communities/irm/modules/${moduleSlug}`} 
-          className="text-gray-500 hover:text-gray-900 hover:underline text-sm inline-block"
-        >
-          &larr; Back to Module
-        </Link>
-        <Link
-          href="/communities/irm/modules"
-          className="text-gray-400 hover:text-gray-700 hover:underline text-xs"
-        >
-          All Modules
+  return (
+    <PageContainer width="reader">
+      {/* Breadcrumb Navigation */}
+      <Breadcrumbs
+        items={[
+          { label: "Home", href: "/" },
+          ...(returnContext === "mine"
+            ? [{ label: "My Submissions", href: "/communities/irm/documents/mine" }]
+            : returnContext === "pending"
+              ? [{ label: "Pending Documents", href: "/communities/irm/documents/pending" }]
+              : [
+                  { label: "Modules", href: "/communities/irm/modules" },
+                  { label: moduleLabel, href: moduleHref },
+                ]),
+          { label: doc ? doc.title : "Document" },
+        ]}
+      />
+
+      <div className="mb-6">
+        <Link href={returnHref} className={buttonStyles("quiet")}>
+          &larr; {returnLabel}
         </Link>
       </div>
 
       {loading ? (
-        <div className="text-gray-500 py-8">Loading document details...</div>
-      ) : error ? (
-        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg">
-          {error}
+        <div className="py-12 text-center text-text-muted text-sm" role="status">Loading document details...</div>
+      ) : error && error !== "Document not found." ? (
+        <div className="my-4">
+          <FeedbackMessage
+            type="error"
+            message={error}
+            onRetry={loadDocument}
+            retryLabel="Retry Loading"
+          />
         </div>
       ) : !doc ? (
         <AccessDeniedGuidance
           isNotFound={true}
           notFoundMessage="Document not found. It may have been removed or rejected."
           returnHref={`/communities/irm/modules/${moduleSlug}`}
-          returnLabel="Module"
+          returnLabel={moduleLabel}
         />
       ) : (
-        <div className="p-6 sm:p-8 bg-white border border-gray-200 rounded-xl shadow-sm">
-          <h1 className="text-2xl font-bold mb-4 text-gray-900">{doc.title}</h1>
-          
-          <div className="space-y-3 mb-8">
-            <p className="text-sm text-gray-700">
-              <span className="font-semibold w-24 inline-block">Type:</span> {doc.type}
-            </p>
-            <p className="text-sm text-gray-700">
-              <span className="font-semibold w-24 inline-block">Source:</span> {doc.source}
-            </p>
-            <p className="text-sm text-gray-700">
-              <span className="font-semibold w-24 inline-block">Added on:</span>{" "}
-              {new Date(doc.created_at).toLocaleDateString()}
-            </p>
+        <div className="ui-surface ui-reader-surface space-y-6">
+          <div>
+            <p className="ui-eyebrow">IRM / Study resources</p>
+          <h1 className="ui-page-heading text-text break-words">{doc.title}</h1>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-2 pt-2 border-t border-border text-xs sm:text-sm text-text-subtle">
+              {returnContext !== "module" && (
+                <p>
+                  <span className="font-semibold text-text">Module:</span>{" "}
+                  <Link href={moduleDocumentHref(moduleSlug)} className="ui-link">{moduleLabel}</Link>
+                </p>
+              )}
+              <p>
+                <span className="font-semibold text-text">Type:</span> {documentTypeLabel(doc.type)}
+              </p>
+              <p>
+                <span className="font-semibold text-text">Source:</span> {documentSourceLabel(doc.source)}
+              </p>
+              <p>
+                <span className="font-semibold text-text">Added:</span>{" "}
+                {new Date(doc.created_at).toLocaleDateString()}
+              </p>
+              <SavedDocumentButton documentId={doc.id} />
+            </div>
           </div>
           
           {downloadError && (
-            <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
-              {downloadError}
-            </div>
+            <FeedbackMessage type="error" message={downloadError} />
           )}
 
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {downloading ? "Downloading..." : "Download"}
-          </button>
+          {/* Embedded Document Reader */}
+          <div className="pt-2 border-t border-border">
+            <DocumentReader
+              key={`${doc.id}:${user?.id ?? "guest"}`}
+              documentId={doc.id}
+              documentTitle={doc.title}
+              approved={doc.status === "APPROVED"}
+              onDownload={handleDownload}
+              downloading={downloading}
+            />
+          </div>
         </div>
       )}
-    </main>
+    </PageContainer>
   );
 }

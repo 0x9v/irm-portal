@@ -38,7 +38,6 @@ def run_concurrent(fn1, fn2):
     t2.join()
 
 # (1) Simultaneous applications to different communities by one user.
-# The user cannot be PENDING/ACTIVE in more than one community globally.
 def test_concurrent_simultaneous_applications(db):
     u = User(id=uuid.uuid4(), username="u1", email="e1", password_hash="x", first_name="A", family_name="B")
     c1 = Community(id=uuid.uuid4(), name="c1", slug="c1")
@@ -75,7 +74,7 @@ def test_concurrent_simultaneous_applications(db):
     run_concurrent(app1, app2)
     
     count = db.query(Membership).count()
-    assert count == 1, "Only one application should succeed"
+    assert count == 2, "Both community applications should succeed"
 
 # (2) Duplicate votes by one voter
 def test_concurrent_duplicate_votes(db):

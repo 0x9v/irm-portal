@@ -1,0 +1,65 @@
+.sidebar, .mobileHeader { color: var(--text); }
+.sidebar a:focus-visible, .sidebar button:focus-visible, .mobileHeader a:focus-visible, .mobileHeader button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sidebar { display: none; width: 260px; min-width: 260px; height: 100dvh; position: sticky; top: 0; z-index: 40; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); background: var(--surface); }
+.sidebarTop { flex: none; padding: 21px 17px 12px; }
+.brand, .mobileBrand { display: inline-flex; min-width: 0; min-height: 44px; align-items: center; gap: 10px; color: var(--text); font-size: 21px; line-height: 26px; font-weight: 770; letter-spacing: -.05em; }
+.brand svg, .mobileBrand svg { width: 38px; height: 38px; flex: none; color: var(--accent); }
+.brand:hover, .mobileBrand:hover { color: var(--accent); }
+.communityIdentity { position: relative; display: flex; min-height: 78px; align-items: center; gap: 10px; margin-top: 19px; padding: 12px 13px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface-secondary); }
+.communityMark { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: 10px; background: var(--brand-ink); color: #eee7f7; font-size: 17px; font-weight: 780; letter-spacing: -.03em; }
+.communityIdentity strong, .communityIdentity small { display: block; }
+.communityIdentity strong { font-size: 14px; line-height: 19px; font-weight: 750; }
+.communityIdentity small { margin-top: 2px; color: var(--text-muted); font-size: 11px; line-height: 16px; }
+.currentCommunity { position: absolute; top: -9px; right: 9px; padding: 1px 6px; background: var(--surface); color: var(--text-muted); font-size: 10px; line-height: 15px; font-weight: 650; }
+.sidebarScroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 9px 12px 16px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.profileFooter { flex: none; min-width: 0; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
+.profileRow { display: flex; min-width: 0; min-height: 54px; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 11px; color: var(--text); text-decoration: none; transition: background-color var(--motion-fast) var(--motion-ease); }
+.profileRow:hover, .profileRow:visited { color: var(--text); }
+.profileRow:hover { background: var(--surface-secondary); }
+.profileText { display: block; min-width: 0; overflow: hidden; }
+.profileText strong, .profileText small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profileText strong { font-size: 13px; line-height: 19px; font-weight: 700; }
+.profileText small { color: var(--text-muted); font-size: 12px; line-height: 17px; }
+.navigation { display: flex; flex-direction: column; gap: 12px; }
+.navGroup { min-width: 0; }
+.navGroup:first-child .groupLabel { display: none; }
+.groupLabel { padding: 0 11px; color: var(--text-muted); font-size: 11px; line-height: 22px; font-weight: 700; letter-spacing: .075em; text-transform: uppercase; }
+.groupItems { display: flex; flex-direction: column; gap: 2px; }
+.navLink { display: flex; min-width: 0; min-height: 44px; align-items: center; gap: 11px; padding: 9px 11px; border: 1px solid transparent; border-radius: 11px; color: var(--text-muted); font-size: 13px; line-height: 20px; font-weight: 620; overflow-wrap: anywhere; }
+.navIcon { width: 19px; height: 19px; flex: none; color: var(--text-muted); stroke-width: 1.8; }
+.navLink:hover { background: var(--surface-secondary); color: var(--text); }
+.navLink:hover .navIcon { color: var(--accent); }
+.activeLink, .activeLink:hover { border-color: var(--border); background: var(--accent-soft); color: var(--accent); font-weight: 750; }
+.activeLink .navIcon { color: var(--accent); }
+.mobileHeader { display: none; position: relative; z-index: 50; background: var(--surface); }
+.mobileBar { position: relative; z-index: 3; background: var(--surface); display: flex; min-height: 62px; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); }
+.mobileLeft { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 8px; }
+.mobileActions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mobileBrand { flex: 0 1 auto; gap: 8px; font-size: 17px; line-height: 21px; }
+.mobileBrand svg { width: 33px; height: 33px; }
+.mobileBrand span { min-width: 0; overflow: hidden; }
+.mobileBrand strong, .mobileBrand small { display: block; }
+.mobileBrand strong, .mobileBrand small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobileBrand small { margin-top: 1px; color: var(--text-muted); font-size: 10px; line-height: 14px; font-weight: 550; letter-spacing: 0; }
+.menuButton { min-width: 78px; flex: none; padding-inline: 11px; }
+.menuButton svg { width: 18px; height: 18px; flex: none; }
+.backdrop { position: fixed; inset: 0; z-index: 1; border: 0; background: rgb(21 18 27 / .42); cursor: default; }
+.drawer { position: absolute; z-index: 2; top: 100%; left: 0; display: flex; width: min(calc(100% - 16px), 430px); max-height: calc(100dvh - var(--mobile-header-height, 62px)); flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: 15px 14px calc(20px + env(safe-area-inset-bottom, 0px)); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 18px 0; background: var(--surface); box-shadow: 0 14px 32px rgb(20 17 26 / .16); scrollbar-width: thin; }
+.drawerCommunity { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; margin-bottom: 14px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-secondary); }
+.drawerCommunity span { grid-column: 1 / -1; color: var(--text-muted); font-size: 10px; line-height: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.drawerCommunity strong { font-size: 13px; line-height: 20px; }
+.drawerCommunity small { align-self: center; color: var(--text-muted); font-size: 11px; line-height: 18px; }
+.drawer .navigation { gap: 14px; }
+.drawer .navLink { min-height: 46px; font-size: 14px; }
+.drawer .profileFooter { margin-top: 16px; padding-inline: 0; padding-bottom: 0; }
+@media (min-width: 1280px) { .sidebar { display: flex; } }
+@media (max-width: 1279px) { .mobileHeader { display: block; } }
+@media (max-width: 599px) { .mobileBrand small { display: none; } }
+@media (max-width: 479px) { .mobileBar { padding-inline: 10px; gap: 4px; } .mobileLeft, .mobileActions { gap: 4px; } .mobileBrand { gap: 5px; font-size: 16px; } .mobileBrand svg { width: 27px; height: 27px; } .menuButton { min-width: 44px; width: 44px; padding: 8px; } .menuButton span { display: none; } .drawer { padding-inline: 11px; } }
+@media (prefers-reduced-motion: reduce) { .sidebar *, .mobileHeader * { transition: none !important; scroll-behavior: auto !important; } }
+
+.contextBar { min-height: 64px; position: sticky; top: 0; z-index: 30; align-items: center; justify-content: space-between; gap: 24px; padding: 9px 28px; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.contextLeft { display: flex; align-items: center; flex: 1; min-width: 0; gap: 13px; }
+.contextTrail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 20px; font-weight: 650; }
+.contextTrail > span { margin-right: 5px; color: var(--text-muted); font-size: 12px; }
+.contextTrail > span > span { margin-left: 8px; }

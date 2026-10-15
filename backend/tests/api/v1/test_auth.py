@@ -65,6 +65,7 @@ def test_register_user_success():
     assert "created_at" in data
     assert "password_hash" not in data
     assert "password" not in data
+    assert data["avatar_url"] is None
     
     # Verify in DB directly
     db = TestingSessionLocal()
@@ -165,6 +166,7 @@ def test_login_success():
     assert data["email"] == "login@example.com"
     assert "password_hash" not in data
     assert "password" not in data
+    assert data["avatar_url"] is None
     
     # Verify cookie
     assert "session" in response.cookies

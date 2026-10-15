@@ -48,24 +48,16 @@ def appoint_delegate(
     if existing_delegate and existing_delegate.user_id != user.id:
         return False, f"Community already has a different active delegate (User {existing_delegate.user_id})"
         
-    # Check user's global memberships
-    # We must lock the target membership if it exists
+    # Membership lifecycle and provisioning checks are scoped to this
+    # community; an operator may provision the same account independently
+    # in another community.
     target_membership = db.query(Membership).filter(
         Membership.user_id == user.id,
         Membership.community_id == community.id
     ).populate_existing().with_for_update().first()
     
-    # Check for active/pending memberships in ANY community
-    global_active_pending = db.query(Membership).filter(
-        Membership.user_id == user.id,
-        Membership.status.in_([MembershipStatus.PENDING, MembershipStatus.ACTIVE])
-    ).all()
-    
-    for m in global_active_pending:
-        if m.community_id != community.id:
-            return False, f"User has active/pending membership in another community (ID: {m.community_id})"
-        if m.status == MembershipStatus.PENDING:
-            return False, "User has a pending membership request in this community. Withdraw or review it first."
+    if target_membership and target_membership.status == MembershipStatus.PENDING:
+        return False, "User has a pending membership request in this community. Withdraw or review it first."
             
     if target_membership:
         if target_membership.status == MembershipStatus.ACTIVE:

@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models.community import Community
 from app.models.module import Module
+from app.models.programme import Programme
 from scripts.seed import seed_db
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -55,3 +56,36 @@ def test_seed_db(db_session):
     
     assert db_session.query(Community).count() == 1
     assert db_session.query(Module).count() == 3
+
+
+def test_seed_links_new_irm_community_and_modules_to_existing_programme(db_session):
+    programme = Programme(
+        slug="irm", name="IRM", institution_slug="fst-mohammedia",
+        institution_name="FST Mohammedia",
+    )
+    db_session.add(programme)
+    db_session.commit()
+
+    seed_db(db_session)
+
+    community = db_session.query(Community).filter_by(slug="irm").one()
+    assert community.programme_id == programme.id
+    assert db_session.query(Module).count() == 3
+    assert {module.programme_id for module in db_session.query(Module).all()} == {programme.id}
+
+
+def test_seed_keeps_existing_unlinked_community_and_modules_unlinked(db_session):
+    programme = Programme(
+        slug="irm", name="IRM", institution_slug="fst-mohammedia",
+        institution_name="FST Mohammedia",
+    )
+    community = Community(name="Unlinked IRM", slug="irm")
+    db_session.add_all([programme, community])
+    db_session.commit()
+    community_id = community.id
+
+    seed_db(db_session)
+
+    assert db_session.query(Community).count() == 1
+    assert db_session.get(Community, community_id).programme_id is None
+    assert {module.programme_id for module in db_session.query(Module).all()} == {None}

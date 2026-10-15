@@ -1,0 +1,142 @@
+/* Reuse existing semantic names. Home dashboard intentionally stays outside .feature. */
+.feature, .context {
+  --page: #f4f2ee;
+  --surface: #fff;
+  --surface-secondary: #eeebe6;
+  --surface-account: #fff;
+  --surface-account-hover: #eeebe6;
+  --surface-community-icon: #eeebe6;
+  --surface-popover: #fff;
+  --surface-aubergine: #19171e;
+  --text: #211f24;
+  --text-muted: #625d65;
+  --text-subtle: #6b646f;
+  --border: #d8d4ce;
+  --control-border: #8b828f;
+  --accent: #65558f;
+  --accent-hover: #57477c;
+  --accent-pressed: #493b69;
+  --accent-active: #65558f;
+  --accent-soft: #eee9f4;
+  --accent-soft-pressed: #e0d8eb;
+  --on-accent: #fff;
+  --focus: #65558f;
+  --disabled-surface: #ebe7e2;
+  --disabled-text: #746d77;
+  --reader-viewport: #e7e3dd;
+  --document-paper: #fff;
+  --radius-control: 12px;
+  --radius-surface: 16px;
+  --radius-tag: 999px;
+  --shadow-sm: 0 0 #0000;
+  --shadow-card: 0 0 #0000;
+  color: var(--text);
+  background: var(--page);
+  color-scheme: light;
+}
+:global(html[data-theme="dark"]) .feature, :global(html[data-theme="dark"]) .context {
+  --page: #17161b;
+  --surface: #211f25;
+  --surface-secondary: #2a272f;
+  --surface-account: #211f25;
+  --surface-account-hover: #2a272f;
+  --surface-community-icon: #2a272f;
+  --surface-popover: #2a272f;
+  --text: #f1eef3;
+  --text-muted: #c7c1ca;
+  --text-subtle: #b8b0bf;
+  --border: #48444d;
+  --control-border: #968b9f;
+  --accent: #b6a8d1;
+  --accent-hover: #c9bde0;
+  --accent-pressed: #d7cbe8;
+  --accent-active: #b6a8d1;
+  --accent-soft: #36303f;
+  --accent-soft-pressed: #443b50;
+  --on-accent: #211c29;
+  --focus: #d0c3e5;
+  --disabled-surface: #2a272f;
+  --disabled-text: #b8b0bf;
+  --reader-viewport: #121116;
+  color-scheme: dark;
+}
+.feature { min-width: 0; flex: 1; }
+.feature :global([data-page-container]) { padding: 24px 16px 40px; }
+.feature :global([data-page-width="wide"]) { max-width: 1260px; }
+.feature :global([data-page-width="reader"]) { max-width: 1600px; }
+.feature :global([data-page-width="narrow"]) { max-width: 520px; }
+.feature :global(h1) { font-size: clamp(28px, 3vw, 38px); line-height: 1.14; font-weight: 750; letter-spacing: -.045em; overflow-wrap: anywhere; }
+.feature :global(h2) { letter-spacing: -.025em; }
+.feature :global(h3) { letter-spacing: -.02em; }
+.feature :global(.ui-eyebrow) { margin-bottom: 10px; font-size: 12px; line-height: 18px; color: var(--text-muted); font-weight: 650; letter-spacing: .055em; }
+.feature :global(.ui-helper) { font-size: 15px; line-height: 24px; }
+.feature :global(.ui-surface) { box-shadow: none; border-radius: 16px; }
+.feature :global(.shadow-card), .feature :global(.shadow-sm) { box-shadow: none; }
+.feature :global(.rounded-xl.bg-surface), .feature :global(.rounded-xl.bg-surface-secondary) { border-radius: 16px; }
+.feature :global(.ui-field), .feature :global(.ui-link) { transition: color 170ms ease, background-color 170ms ease, border-color 170ms ease; }
+.feature :global(button) { min-height: 44px; max-width: 100%; cursor: pointer; }
+.feature :global(button:disabled) { cursor: not-allowed; }
+.feature :global(input:not([type="checkbox"]):not([type="radio"]):not([type="range"])), .feature :global(select), .feature :global(textarea) { min-width: 0; max-width: 100%; min-height: 44px; border-radius: 12px; border-color: var(--control-border); font-size: 16px; line-height: 24px; }
+.feature :global(input[aria-invalid="true"]), .feature :global(textarea[aria-invalid="true"]) { border-color: var(--error); }
+.feature :global(input), .feature :global(select), .feature :global(textarea) { accent-color: var(--accent); }
+.feature :global(a:focus-visible), .feature :global(button:focus-visible), .feature :global(input:focus-visible), .feature :global(select:focus-visible), .feature :global(textarea:focus-visible), .feature :global([tabindex="0"]:focus-visible) { outline: 3px solid var(--focus); outline-offset: 3px; }
+.feature :global([role="status"]), .feature :global([role="alert"]) { overflow-wrap: anywhere; }
+.feature :global(.role-badge--moderator) { color: var(--info); background: var(--info-surface); border-color: var(--info-border); }
+.feature :global(.ui-document-list) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.feature :global(.ui-document-list > .ui-surface) { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 18px; }
+.feature :global(.ui-document-list h3) { overflow-wrap: anywhere; -webkit-line-clamp: unset; }
+.feature :global(.ui-document-list > .ui-surface > .border-t) { border-top: 0; padding-top: 0; }
+.feature :global(.ui-reader-surface) { padding: 16px; }
+.feature :global(.ui-reader-toolbar) { gap: 12px; padding: 12px; }
+.feature :global(.ui-reader-toolbar > div) { flex-wrap: wrap; min-width: 0; }
+.feature :global(.ui-auth-brand) { display: flex; align-items: center; gap: 12px; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+.feature :global(.ui-auth-brand svg) { width: 40px; height: 40px; color: var(--accent); flex: none; }
+.feature :global(.ui-auth-brand strong) { display: block; font-size: 22px; line-height: 26px; font-weight: 750; letter-spacing: -.04em; }
+.feature :global(.ui-auth-brand small) { display: block; color: var(--text-muted); font-size: 12px; margin-top: 3px; }
+.context { min-width: 0; position: relative; background: var(--page); }
+.ink {
+  --surface: #24212a; --surface-secondary: #302b38;
+  --surface-account: #19171e; --surface-account-hover: #302b38;
+  --text: #f8f6f8; --text-muted: #d4d0d8; --text-subtle: #c7c2cc;
+  --border: #39343f; --control-border: #9c95a4;
+  --accent: #d0c3e5; --accent-hover: #e2d9f0; --accent-soft: #3a3443;
+  --on-accent: #211c29; --focus: #e2d9f0;
+  --radius-control: 12px; --radius-tag: 999px;
+  --disabled-surface: #302b38; --disabled-text: #b6afbf;
+  background: #19171e; color: #f8f6f8; color-scheme: dark;
+}
+.ink a { text-decoration: none; }
+.ink :global(.ui-nav-link) { min-height: 48px; }
+.ink :global(.ui-nav-link[aria-current="page"]) { color: #f8f6f8; box-shadow: inset 3px 0 #b6a8d1; }
+.ink :global(.ui-nav-link svg) { stroke-width: 1.8; color: #c7c2cc; }
+.ink a:focus-visible, .ink button:focus-visible { outline: 3px solid #e2d9f0; outline-offset: 3px; }
+.ink :global(.role-badge) { white-space: normal; line-height: 18px; }
+.ink :global(.role-badge--member) { --success: #86efac; --success-surface: #132b1e; --success-border: #22543d; }
+.ink :global(.role-badge--moderator) { color: #93c5fd; background: #122340; border-color: #20437a; }
+.ink :global(.role-badge--guest) { color: #c7c2cc; background: #24212a; }
+.ink :global(.role-badge--unavailable) { color: #fbbf24; background: #2c1e0a; border-color: #593f0f; }
+.ink :global([role="alert"]) { --error: #fca5a5; --error-hover: #fecaca; --error-surface: #2d1317; --error-border: #5e222a; }
+.brand { display: flex; align-items: center; gap: 10px; min-height: 44px; color: #f8f6f8; }
+.brand svg { width: 36px; height: 36px; flex: none; color: #b6a8d1; }
+.brand strong { display: block; font-weight: 750; font-size: 20px; line-height: 24px; letter-spacing: -.04em; }
+.brand small { display: block; font-size: 11px; line-height: 18px; color: #c7c2cc; }
+@media (min-width: 768px) {
+  .feature :global([data-page-container]) { padding: 32px 24px 48px; }
+  .feature :global(.ui-document-list > .ui-surface) { grid-template-columns: minmax(0, 1fr) minmax(180px, 220px); }
+}
+@media (min-width: 1280px) {
+  .feature :global([data-page-container]) { padding: 40px 32px 56px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feature *, .ink * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+.feature :global([data-content-card]) { border-left-width: 1px; border-left-color: var(--border); border-radius: 16px; box-shadow: none; }
+.feature :global([data-content-card]:hover) { border-color: var(--control-border); box-shadow: none; }
+.feature :global([data-content-card] .text-accent) { color: var(--text); }
+.feature :global(article), .feature :global(form) { min-width: 0; }
+.feature :global(p), .feature :global(dd), .feature :global(.break-words), .feature :global(.ui-button), .feature :global(.role-badge) { overflow-wrap: anywhere; }
+.dialog { background: var(--surface); color: var(--text); }
+.feature :global([data-content-card] h2), .feature :global([data-content-card] h3) { color: var(--text); }
+.feature :global(input[type="file"]) { overflow: hidden; }
+/* The public shell resets component links; restore the affordance for prose. */
+.feature :global(.ui-link) { text-decoration: underline; text-underline-offset: 3px; }

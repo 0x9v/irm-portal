@@ -5,9 +5,10 @@ from sqlalchemy import DateTime, ForeignKey, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.content_removal import ContentRemoval
 
 
-class Announcement(Base):
+class Announcement(ContentRemoval, Base):
     __tablename__ = "announcements"
 
     id: Mapped[UUID] = mapped_column(
@@ -35,4 +36,11 @@ class Announcement(Base):
     )
 
     community: Mapped["Community"] = relationship(back_populates="announcements")
-    author: Mapped["User"] = relationship(back_populates="announcements")
+    author: Mapped["User"] = relationship(back_populates="announcements", foreign_keys=[author_id])
+    replies: Mapped[list["AnnouncementReply"]] = relationship(
+        back_populates="announcement", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+    @property
+    def author_username(self) -> str | None:
+        return self.author.username if self.author else None

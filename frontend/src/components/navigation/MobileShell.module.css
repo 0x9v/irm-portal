@@ -1,0 +1,27 @@
+/* One mobile navigation surface; the desktop sidebar breakpoint stays at 1280px. */
+.workspace { min-width: 0; }
+.bottomNav { display: none; }
+@media (max-width: 1279px) {
+  .workspace { padding-bottom: calc(var(--mobile-navigation-height, 76px) + 20px); }
+  .workspace :is(a, button, input, textarea, select, [tabindex]) { scroll-margin-block: 24px calc(var(--mobile-navigation-height, 76px) + 24px); }
+  .bottomNav { position: fixed; inset: auto 0 0; z-index: 40; display: block; padding: 5px 7px calc(5px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); background: var(--surface); color: var(--text); }
+  .bottomLinks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; max-width: 760px; margin-inline: auto; }
+  .bottomLink { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 58px; padding: 5px 1px; border-radius: 11px; color: var(--text-muted); font-size: 11px; line-height: 16px; text-decoration: none; overflow-wrap: anywhere; text-align: center; }
+  .bottomIcon { display: grid; place-items: center; width: 34px; height: 26px; border-radius: 8px; }
+  .bottomIcon svg { width: 21px; height: 21px; stroke-width: 1.7; }
+  .bottomLink[aria-current="page"] { color: var(--accent); font-weight: 750; }
+  .bottomLink[aria-current="page"] .bottomIcon { background: var(--accent-soft); }
+  .bottomLink:hover { background: var(--surface-secondary); }
+  .bottomLink:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  :global([data-application-shell]:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus)) .bottomNav { display: none; }
+}
+.header { position: relative; z-index: 50; }
+.headerBar { position: relative; z-index: 2; background: #19171e; min-height: 72px; padding: 12px 16px; gap: 12px; }
+.brand { min-width: 0; min-height: 44px; flex-shrink: 1; gap: 10px; }
+.headerContext { display: none; }
+.menuButton { min-height: 44px; border-color: #9c95a4; color: #f8f6f8; background: #24212a; flex-shrink: 0; }
+.menuButton svg { color: inherit; }
+.drawer { position: relative; z-index: 2; background: #19171e; max-height: calc(100dvh - 72px); overscroll-behavior: contain; padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+.backdrop { position: fixed; inset: 0; z-index: 1; background: rgb(0 0 0 / .45); border: 0; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .header * { transition: none; animation: none; } }
+.drawer { width: calc(100% - 16px); max-width: 440px; border-right: 1px solid #39343f; border-bottom: 1px solid #39343f; border-radius: 0 0 16px 0; }

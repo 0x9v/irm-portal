@@ -1,5 +1,386 @@
 @import "tailwindcss";
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
+:root {
+  --page: #F4F2EE;
+  --surface: #FFFFFF;
+  --surface-secondary: #EEEBE6;
+  /* Shared EtudSup surfaces; IRM community pages can retain scoped accents. */
+  --surface-account: #FFFFFF;
+  --surface-account-hover: #EEEBE6;
+  --surface-community-icon: #EEEBE6;
+  --brand-ink: #19171E;
+  --surface-aubergine: var(--brand-ink);
+  --text: #211F24;
+  --text-muted: #625D65;
+  --text-subtle: #6B646F;
+  --border: #D8D4CE;
+  --control-border: #8B828F;
+  --accent: #65558F;
+  --accent-hover: #57477C;
+  --accent-pressed: #493B69;
+  --accent-active: #65558F;
+  --accent-soft: #EEE9F4;
+  --on-accent: #FFFFFF;
+  --focus: #65558F;
+  --disabled-surface: #EBE7E2;
+  --disabled-text: #746D77;
+  --success: #15803D;
+  --success-surface: #F0FDF4;
+  --success-border: #BBF7D0;
+  --warning: #B45309;
+  --warning-surface: #FFFBEB;
+  --warning-border: #FDE68A;
+  --error: #B91C1C;
+  --error-hover: #991B1B;
+  --error-surface: #FEF2F2;
+  --error-border: #FECACA;
+  --info: #1D4ED8;
+  --info-surface: #EFF6FF;
+  --info-border: #BFDBFE;
+  --surface-popover: #FFFFFF;
+  --accent-soft-pressed: #E0D8EB;
+  --error-pressed: #7F1D1D;
+  --danger-action: #B91C1C;
+  --danger-action-hover: #991B1B;
+  --danger-action-pressed: #7F1D1D;
+  --on-danger-action: #FFFFFF;
+  --reader-viewport: #E7E3DD;
+  /* Original document colours and PDF selection sit on fixed white paper. */
+  --document-paper: #FFFFFF;
+  --font-body: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius-tag: 999px;
+  --radius-control: 12px;
+  --radius-surface: 16px;
+  --sidebar-width: 248px;
+  --shadow-sm: 0 1px 2px 0 rgb(32 27 44 / 0.05);
+  --shadow-card: 0 2px 8px -1px rgb(32 27 44 / 0.06), 0 1px 3px 0 rgb(32 27 44 / 0.04);
+  --shadow-overlay: 0 12px 32px -4px rgb(32 27 44 / 0.16);
+  --motion-fast: 170ms;
+  --motion-disclosure: 200ms;
+  --motion-ease: cubic-bezier(.2, 0, 0, 1);
+}
+
+/* Resolved theme only; preference/System resolution belongs to the provider. */
+html[data-theme="dark"] {
+  --page: #17161B;
+  --surface: #211F25;
+  --surface-secondary: #2A272F;
+  --surface-account: var(--surface-secondary);
+  --surface-account-hover: var(--accent-soft);
+  --surface-community-icon: var(--accent-soft);
+  --brand-ink: #19171E;
+  --surface-aubergine: var(--brand-ink);
+  --text: #F1EEF3;
+  --text-muted: #C7C1CA;
+  /* Placeholders and boundaries must also remain readable on raised surfaces. */
+  --text-subtle: #B8B0BF;
+  --border: #48444D;
+  --control-border: #968B9F;
+  --accent: #B6A8D1;
+  --accent-hover: #C9BDE0;
+  --accent-pressed: #D7CBE8;
+  --accent-active: #B6A8D1;
+  --accent-soft: #36303F;
+  --on-accent: #211C29;
+  --focus: #D0C3E5;
+  --disabled-surface: #2A272F;
+  --disabled-text: #B8B0BF;
+  --success: #4ADE80;
+  --success-surface: #132B1E;
+  --success-border: #22543D;
+  --warning: #FBBF24;
+  --warning-surface: #2C1E0A;
+  --warning-border: #593F0F;
+  --error: #F87171;
+  --error-hover: #EF4444;
+  --error-surface: #2D1317;
+  --error-border: #5E222A;
+  --info: #60A5FA;
+  --info-surface: #122340;
+  --info-border: #20437A;
+  --surface-popover: #2A272F;
+  --accent-soft-pressed: #443B50;
+  --error-pressed: #E84040;
+  --danger-action: #F87171;
+  --danger-action-hover: #FCA5A5;
+  --danger-action-pressed: #FECACA;
+  --on-danger-action: #211C29;
+  --reader-viewport: #121116;
+  --document-paper: #FFFFFF;
+}
+
+/* Add semantic names without changing Tailwind's existing colour palettes. */
+@theme inline {
+  --font-sans: var(--font-body);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-account: var(--surface-account);
+  --color-surface-account-hover: var(--surface-account-hover);
+  --color-surface-community-icon: var(--surface-community-icon);
+  --color-surface-aubergine: var(--surface-aubergine);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
+  --color-border: var(--border);
+  --color-control-border: var(--control-border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-pressed: var(--accent-pressed);
+  --color-accent-active: var(--accent-active);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-focus: var(--focus);
+  --color-disabled-surface: var(--disabled-surface);
+  --color-disabled-text: var(--disabled-text);
+  --color-success: var(--success);
+  --color-success-surface: var(--success-surface);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-border: var(--warning-border);
+  --color-error: var(--error);
+  --color-error-hover: var(--error-hover);
+  --color-error-surface: var(--error-surface);
+  --color-error-border: var(--error-border);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
+  --color-info-border: var(--info-border);
+  --color-surface-popover: var(--surface-popover);
+  --color-accent-soft-pressed: var(--accent-soft-pressed);
+  --color-error-pressed: var(--error-pressed);
+  --color-reader-viewport: var(--reader-viewport);
+  --color-document-paper: var(--document-paper);
+}
+
+@theme {
+  --radius-tag: 999px;
+  --radius-control: 12px;
+  --radius-surface: 16px;
+  --shadow-sm: 0 1px 2px 0 rgb(32 27 44 / 0.05);
+  --shadow-card: 0 2px 8px -1px rgb(32 27 44 / 0.06), 0 1px 3px 0 rgb(32 27 44 / 0.04);
+  --shadow-overlay: 0 12px 32px -4px rgb(32 27 44 / 0.16);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    color: var(--text);
+    background-color: var(--page);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+
+  body {
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 24px;
+    color: var(--text);
+    background-color: var(--page);
+  }
+}
+
+/* Opt-in presentation only: never target reader canvases or text-layer spans. */
+@layer components {
+  .ui-page-heading { font-size: 28px; line-height: 36px; font-weight: 700; color: var(--text); }
+  .ui-section-heading { font-size: 20px; line-height: 28px; font-weight: 600; color: var(--text); }
+  .ui-card-title { font-size: 18px; line-height: 26px; font-weight: 600; color: var(--text); }
+  .ui-compact { font-size: 14px; line-height: 22px; }
+  .ui-helper { font-size: 14px; line-height: 20px; color: var(--text-muted); }
+  .ui-label { display: block; margin-bottom: 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text); }
+  .ui-field-error { margin-top: 8px; font-size: 14px; line-height: 20px; color: var(--error); }
+  .ui-surface { padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--shadow-card); }
+
+  /* Academic Hero Banner */
+  .academic-hero {
+    background: var(--surface-aubergine);
+    color: #fff;
+    border-radius: var(--radius-surface);
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: #EDE9FE;
+    margin-bottom: 12px;
+  }
+  .hero-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 8px;
+    color: #FFFFFF;
+    letter-spacing: -0.4px;
+  }
+  .hero-desc {
+    font-size: 14px;
+    color: #E2DAF2;
+    line-height: 1.5;
+    max-width: 680px;
+  }
+
+  /* Role Badges */
+  .role-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: var(--radius-tag);
+    line-height: 1.2;
+  }
+  .role-badge--member {
+    background: var(--success-surface);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+  }
+  .role-badge--delegate {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-soft-pressed);
+  }
+  .role-badge--moderator {
+    background: var(--info-surface);
+    color: var(--info);
+    border: 1px solid var(--info-border);
+  }
+  .role-badge--pending {
+    background: var(--warning-surface);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+  }
+  .role-badge--rejected {
+    background: var(--error-surface);
+    color: var(--error);
+    border: 1px solid var(--error-border);
+  }
+  .role-badge--guest {
+    background: var(--surface-secondary);
+    color: var(--text-subtle);
+    border: 1px solid var(--border);
+  }
+  .role-badge--unavailable {
+    background: var(--warning-surface);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+  }
+
+
+  .ui-field {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 14px;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-control);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 24px;
+    transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
+  }
+  .ui-field::placeholder { color: var(--text-subtle); }
+  .ui-field[aria-invalid="true"] { border-color: var(--error); background: var(--error-surface); }
+  .ui-field[aria-invalid="true"]::placeholder { color: var(--text-muted); }
+  .ui-field:disabled { background: var(--disabled-surface); color: var(--disabled-text); cursor: not-allowed; }
+  .ui-field:focus { outline: 2px solid var(--focus); outline-offset: 2px; border-color: var(--accent); }
+
+  .ui-link { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; border-radius: var(--radius-tag); font-weight: 500; transition: color var(--motion-fast) var(--motion-ease); }
+  .ui-link:hover { color: var(--accent-hover); }
+  /* Focus visible state with violet focus ring */
+  .ui-button:focus-visible, .ui-link:focus-visible, .ui-nav-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .ui-menu-icon { transition: transform var(--motion-fast) var(--motion-ease); }
+
+  @media (min-width: 768px) {
+    .ui-page-heading { font-size: 32px; line-height: 40px; }
+    .ui-surface { padding: 24px; }
+  }
+}
+
+
+/* Shared action boundary. Keep prose .ui-link separate from actionable destinations.
+   Unlayered ownership prevents Tailwind utility fills from competing with variants. */
+.ui-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; min-width: 44px; min-height: 44px; max-width: 100%;
+  padding: 10px 18px; border: 1px solid transparent; border-radius: var(--radius-control);
+  font-family: inherit; font-size: 14px; line-height: 20px; font-weight: 600;
+  text-align: center; white-space: normal; overflow-wrap: anywhere; box-shadow: none;
+  cursor: pointer; vertical-align: middle;
+  transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
+}
+.ui-button:not(.absolute) { position: relative; }
+.ui-button-label { display: inline-grid; min-width: 0; }
+.ui-button-label > span { grid-area: 1 / 1; }
+.ui-button svg { flex: none; width: 20px; height: 20px; }
+.ui-button--primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.ui-button--primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.ui-button--primary:active:not(:disabled) { background: var(--accent-pressed); border-color: var(--accent-pressed); }
+.ui-button--secondary { background: var(--surface); border-color: var(--control-border); color: var(--text); }
+.ui-button--secondary:hover:not(:disabled) { background: var(--surface-secondary); border-color: var(--text-muted); }
+.ui-button--secondary:active:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+.ui-button--quiet { padding-inline: 12px; background: transparent; color: var(--text-muted); border-color: transparent; }
+.ui-button--quiet:hover:not(:disabled) { background: var(--surface-secondary); border-color: var(--border); color: var(--text); }
+.ui-button--quiet:active:not(:disabled) { background: var(--accent-soft); border-color: var(--control-border); color: var(--text); }
+.ui-button--destructive { background: var(--danger-action); color: var(--on-danger-action); border-color: var(--danger-action); }
+.ui-button--destructive:hover:not(:disabled) { background: var(--danger-action-hover); border-color: var(--danger-action-hover); }
+.ui-button--destructive:active:not(:disabled) { background: var(--danger-action-pressed); border-color: var(--danger-action-pressed); }
+.ui-button[aria-pressed="true"], .ui-icon-button[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.ui-button:disabled { background: var(--disabled-surface); color: var(--disabled-text); border-color: var(--control-border); border-style: dashed; cursor: not-allowed; opacity: 1; }
+.ui-button[aria-busy="true"] { cursor: wait; border-style: solid; }
+.ui-button[aria-busy="true"]::after { content: ""; position: absolute; right: 5px; top: calc(50% - 5px); width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ui-action-spin 800ms linear infinite; }
+.ui-icon-button { flex: none; width: 44px; height: 44px; padding: 10px; }
+@media (hover: hover) and (pointer: fine) {
+  .ui-button:not(.ui-icon-button):active:not(:disabled):not([aria-busy="true"]) { transform: translateY(1px); }
+}
+/* Set decoration on the link boundary; descendants cannot cancel an ancestor line. */
+:is(.ui-button, .ui-nav-link, .ui-card-link), :is(.ui-button, .ui-nav-link, .ui-card-link):is(:hover, :focus, :active, :visited) { text-decoration: none; }
+.ui-nav-link, .ui-card-link { transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease); }
+:is(.ui-button, .ui-nav-link, .ui-card-link):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+@keyframes ui-action-spin { to { transform: rotate(360deg); } }
+
+/* Entrance only. Open/close and focus remain under the existing component lifecycle. */
+@keyframes ui-enter-disclosure { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ui-enter-inline { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ui-enter-drawer { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes ui-enter-dialog { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: scale(1); } }
+@keyframes ui-enter-backdrop { from { opacity: 0; } to { opacity: 1; } }
+.ui-motion-disclosure { animation: ui-enter-disclosure var(--motion-disclosure) var(--motion-ease) both; }
+.ui-motion-disclosure[hidden] { animation: none; }
+.ui-motion-inline { animation: ui-enter-inline var(--motion-fast) var(--motion-ease) both; }
+.ui-motion-drawer { animation: ui-enter-drawer var(--motion-disclosure) var(--motion-ease) both; }
+.ui-motion-backdrop { animation: ui-enter-backdrop var(--motion-fast) var(--motion-ease) both; }
+dialog[open].ui-motion-dialog { animation: ui-enter-dialog var(--motion-disclosure) var(--motion-ease) both; }
+dialog[open].ui-motion-dialog::backdrop { animation: ui-enter-backdrop var(--motion-fast) var(--motion-ease) both; }
+
+/* Outside layers so this scoped state overrides the control's utility fills.
+   Keep light's existing disabled treatment; avoid dim text on dark panels. */
+html[data-theme="dark"] .ui-account-logout:disabled {
+  opacity: 1;
+  background: var(--disabled-surface);
+  color: var(--disabled-text);
+  border-color: var(--control-border);
+  cursor: not-allowed;
+}
+html[data-theme="dark"] .ui-account-logout:disabled svg { color: inherit; }
+
+/* Immediate state and focus for people who request less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-button, .ui-field, .ui-link, .ui-nav-link, .ui-card-link, .ui-menu-icon { transition: none; }
+  .ui-button:not(.ui-icon-button):active:not(:disabled) { transform: none; }
+  .ui-button[aria-busy="true"]::after,
+  .ui-motion-disclosure, .ui-motion-inline, .ui-motion-drawer, .ui-motion-backdrop,
+  dialog[open].ui-motion-dialog, dialog[open].ui-motion-dialog::backdrop { animation: none; }
 }

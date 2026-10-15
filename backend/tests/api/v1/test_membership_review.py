@@ -133,6 +133,17 @@ def test_delegate_cross_community_fails(client, db_session):
     # 6. DELEGATE of Community A cannot reject a membership from Community B.
     assert client.post(f"/api/v1/communities/comm-b/membership/{m.id}/reject", cookies={settings.session_cookie_name: token}).status_code == 403
 
+    # A separate Delegate in B cannot manage a target membership in A.
+    delegate_b = _create_user(db_session, "delegate-b")
+    token_b = _create_token(db_session, delegate_b)
+    _create_membership(db_session, delegate_b, comm_b, MembershipStatus.ACTIVE, MembershipRole.DELEGATE)
+    target_a = _create_user(db_session, "target-a")
+    member_a = _create_membership(db_session, target_a, comm_a, MembershipStatus.ACTIVE, MembershipRole.MEMBER)
+    assert client.put(f"/api/v1/communities/comm-a/memberships/{member_a.id}/ban",
+                      cookies={settings.session_cookie_name: token_b}).status_code == 403
+    db_session.refresh(member_a)
+    assert member_a.status is MembershipStatus.ACTIVE
+
 def test_approval_flow(client, db_session):
     community = _create_community(db_session, "irm")
     delegate = _create_user(db_session, "delegate")
@@ -342,6 +353,11 @@ def test_pending_memberships_delegate_allowed(client, db_session):
     assert data[0]["cne"] == "APP123"
     assert data[0]["username"] == "applicant1"
     assert data[0]["first_name"] == "First"
+    assert data[0]["applicant_type"] is None
+    assert data[0]["applicant_first_name"] is None
+    assert data[0]["applicant_family_name"] is None
+    assert data[0]["identifier_type"] is None
+    assert data[0]["promotion"] is None
     assert "password" not in data[0]
     assert "email" not in data[0]
     assert response.headers.get("Cache-Control") == "private, no-store"

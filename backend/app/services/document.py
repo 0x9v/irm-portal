@@ -1,7 +1,8 @@
 import uuid
 from fastapi import UploadFile, HTTPException, status
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
-from app.models.document import Document, DocumentSource, DocumentStatus, DocumentType
+from app.models.document import Document, DocumentSource, DocumentStatus, DocumentType, ResourceKind
 from app.models.membership import Membership, MembershipRole, MembershipStatus
 from app.models.module import Module
 from app.core.storage.local import LocalFileSystemStorage
@@ -14,6 +15,38 @@ ALLOWED_MIME_TYPES = {
     "image/png": ".png",
 }
 
+
+def resolve_document_source(
+    db: Session, membership: Membership, requested_source: DocumentSource | None
+) -> DocumentSource:
+    """Apply the established MEMBER/DELEGATE/MODERATOR source policy."""
+    if membership.role == MembershipRole.MEMBER:
+        if requested_source == DocumentSource.OFFICIAL:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Members cannot create official documents.")
+        return DocumentSource.STUDENT
+    if membership.role == MembershipRole.DELEGATE:
+        if requested_source is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail="Delegates and Moderators must explicitly provide a source.")
+        return requested_source
+    if membership.role == MembershipRole.MODERATOR:
+        if requested_source is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail="Delegates and Moderators must explicitly provide a source.")
+        if requested_source == DocumentSource.OFFICIAL:
+            from app.models.membership_permission import MembershipPermission, PermissionType
+
+            grant = db.query(MembershipPermission).filter(
+                MembershipPermission.membership_id == membership.id,
+                MembershipPermission.permission == PermissionType.UPLOAD_OFFICIAL_DOCUMENTS,
+            ).first()
+            if grant is None:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="Moderator does not have permission to upload official documents.")
+        return requested_source
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+
 def upload_document(
     db: Session,
     module: Module,
@@ -22,41 +55,10 @@ def upload_document(
     file: UploadFile,
     title: str,
     doc_type: DocumentType,
-    requested_source: DocumentSource | None = None
+    requested_source: DocumentSource | None = None,
+    description: str | None = None,
 ) -> Document:
-    # 1. Determine source based on role
-    if membership.role == MembershipRole.MEMBER:
-        if requested_source == DocumentSource.OFFICIAL:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Members cannot create official documents."
-            )
-        final_source = DocumentSource.STUDENT
-    elif membership.role == MembershipRole.DELEGATE:
-        if requested_source is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Delegates and Moderators must explicitly provide a source."
-            )
-        final_source = requested_source
-    elif membership.role == MembershipRole.MODERATOR:
-        if requested_source is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Delegates and Moderators must explicitly provide a source."
-            )
-        if requested_source == DocumentSource.OFFICIAL:
-            from app.models.membership_permission import MembershipPermission, PermissionType
-            grant = db.query(MembershipPermission).filter(
-                MembershipPermission.membership_id == membership.id,
-                MembershipPermission.permission == PermissionType.UPLOAD_OFFICIAL_DOCUMENTS
-            ).first()
-            if not grant:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Moderator does not have permission to upload official documents."
-                )
-        final_source = requested_source
+    final_source = resolve_document_source(db, membership, requested_source)
     # 1b. Determine status purely from the validated source
     if final_source == DocumentSource.OFFICIAL:
         final_status = DocumentStatus.APPROVED
@@ -140,6 +142,8 @@ def upload_document(
         module_id=module.id,
         uploader_id=uploader_id,
         title=title,
+        description=description,
+        resource_kind=ResourceKind.PDF if file.content_type == "application/pdf" else ResourceKind.IMAGE,
         type=doc_type,
         source=final_source,
         status=final_status,
@@ -150,10 +154,8 @@ def upload_document(
     
     try:
         db.add(doc)
-        db.commit()
-        db.refresh(doc)
-    except Exception as e:
-        # Cleanup stored file and preview if DB fails
+        db.flush()
+    except Exception:
         db.rollback()
         storage.delete(storage_key)
         if preview_key:
@@ -161,24 +163,118 @@ def upload_document(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to persist document to database."
-        )
+        ) from None
 
-    return doc
+    try:
+        db.commit()
+        return doc
+    except Exception:
+        # A successful rollback plus a fresh read distinguishes a confirmed
+        # failed commit from a commit whose acknowledgement was lost.
+        try:
+            db.rollback()
+            committed = db.query(Document).filter(Document.id == doc_id).first()
+        except Exception:
+            committed = None
+            rollback_confirmed = False
+        else:
+            rollback_confirmed = True
+        if committed is not None and committed.storage_path == storage_key:
+            return committed
+        if rollback_confirmed:
+            storage.delete(storage_key)
+            if preview_key:
+                storage.delete(preview_key)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to persist document to database.",
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document save outcome is uncertain; retry after checking the module.",
+        ) from None
 
 
-def list_approved_documents(db: Session, module_id: uuid.UUID) -> list[Document]:
+def list_approved_documents(
+    db: Session,
+    module_id: uuid.UUID,
+    *,
+    title_query: str | None = None,
+    doc_type: DocumentType | None = None,
+    source: DocumentSource | None = None,
+) -> list[Document]:
     """
     List all APPROVED documents for a given module, ordered by newest first.
     """
-    return (
-        db.query(Document)
-        .filter(
-            Document.module_id == module_id,
-            Document.status == DocumentStatus.APPROVED
-        )
-        .order_by(Document.created_at.desc())
-        .all()
+    query = db.query(Document).filter(
+        Document.module_id == module_id,
+        Document.status == DocumentStatus.APPROVED,
+        Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
+        Document.storage_path.is_not(None),
     )
+    if title_query:
+        # Escape LIKE metacharacters so user input is literal text.
+        escaped_query = title_query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(Document.title.ilike(f"%{escaped_query}%", escape="\\"))
+    if doc_type is not None:
+        query = query.filter(Document.type == doc_type)
+    if source is not None:
+        query = query.filter(Document.source == source)
+    return query.order_by(Document.created_at.desc()).all()
+
+
+def list_my_document_submissions(
+    db: Session,
+    *,
+    community_id: uuid.UUID,
+    uploader_id: uuid.UUID,
+    limit: int = 20,
+    after: uuid.UUID | None = None,
+    status_filter: DocumentStatus | None = None,
+) -> tuple[list[tuple[Document, Module]], uuid.UUID | None]:
+    """List one caller's submissions in one community with a scoped keyset cursor."""
+    base_query = (
+        db.query(Document, Module)
+        .join(Module, Document.module_id == Module.id)
+        .filter(
+            Module.community_id == community_id,
+            Document.uploader_id == uploader_id,
+            Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
+            Document.storage_path.is_not(None),
+        )
+    )
+    if status_filter is not None:
+        base_query = base_query.filter(Document.status == status_filter)
+
+    if after is not None:
+        cursor_query = (
+            db.query(Document.created_at, Document.id)
+            .join(Module, Document.module_id == Module.id)
+            .filter(
+                Document.id == after,
+                Module.community_id == community_id,
+                Document.uploader_id == uploader_id,
+                Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
+                Document.storage_path.is_not(None),
+            )
+        )
+        if status_filter is not None:
+            cursor_query = cursor_query.filter(Document.status == status_filter)
+        cursor = cursor_query.first()
+        if cursor is None:
+            raise HTTPException(status_code=404, detail="Document submission not found.")
+        base_query = base_query.filter(
+            or_(
+                Document.created_at < cursor.created_at,
+                and_(Document.created_at == cursor.created_at, Document.id < cursor.id),
+            )
+        )
+
+    rows = base_query.order_by(Document.created_at.desc(), Document.id.desc()).limit(limit + 1).all()
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = items[-1][0].id if has_more and items else None
+    return items, next_cursor
 
 
 def get_approved_document(db: Session, module_id: uuid.UUID, document_id: str) -> Document:
@@ -198,7 +294,9 @@ def get_approved_document(db: Session, module_id: uuid.UUID, document_id: str) -
         .filter(
             Document.id == doc_uuid,
             Document.module_id == module_id,
-            Document.status == DocumentStatus.APPROVED
+            Document.status == DocumentStatus.APPROVED,
+            Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
+            Document.storage_path.is_not(None),
         )
         .first()
     )
@@ -221,6 +319,9 @@ def get_document_download_info(doc: Document) -> tuple[str, str, str]:
     import re
     from app.core.storage.exceptions import ObjectNotFoundError
 
+    if doc.resource_kind not in (ResourceKind.PDF, ResourceKind.IMAGE) or not doc.storage_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
     try:
         file_path = storage.get_path(doc.storage_path)
     except ObjectNotFoundError:
@@ -232,6 +333,7 @@ def get_document_download_info(doc: Document) -> tuple[str, str, str]:
     # Determine mime type from extension
     ext = os.path.splitext(doc.storage_path)[1].lower()
     ext_to_mime = {v: k for k, v in ALLOWED_MIME_TYPES.items()}
+    ext_to_mime[".jpeg"] = "image/jpeg"
     mime_type = ext_to_mime.get(ext, "application/octet-stream")
 
     # Sanitize title to prevent header injection or traversal in Content-Disposition
@@ -351,7 +453,9 @@ def list_pending_student_documents(
         .filter(
             Module.community_id == community.id,
             Document.source == DocumentSource.STUDENT,
-            Document.status == DocumentStatus.PENDING
+            Document.status == DocumentStatus.PENDING,
+            Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
+            Document.storage_path.is_not(None),
         )
         .order_by(Document.created_at.asc(), Document.id.asc())
         .all()

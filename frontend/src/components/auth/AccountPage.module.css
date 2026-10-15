@@ -1,0 +1,71 @@
+.page { min-height: 100vh; width: 100%; padding: 16px; background: var(--page); color: var(--text); }
+.page a:focus-visible, .page button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.layout { width: min(100%, 1440px); min-height: calc(100vh - 32px); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; }
+.brandPanel { position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; overflow: hidden; border: 1px solid #39343f; border-radius: 38px; background: #17151c; padding: 40px 48px; color: #f8f6f8; }
+.brandPanel::before, .brandPanel::after { position: absolute; z-index: -1; content: ""; width: 500px; height: 500px; border-radius: 50%; pointer-events: none; }
+.brandPanel::before { left: -260px; bottom: -320px; background: radial-gradient(circle, rgb(105 74 197 / 42%), transparent 70%); }
+.brandPanel::after { right: -290px; top: -340px; background: radial-gradient(circle, rgb(177 158 229 / 34%), transparent 70%); }
+.brand { display: inline-flex; width: fit-content; min-height: 48px; align-items: center; gap: 11px; color: #f8f6f8; text-decoration: none; }
+.brand svg, .mobileBrand svg { width: 43px; height: 43px; flex: none; color: #bdabf5; }
+.brand strong { display: block; font-size: 19px; line-height: 23px; font-weight: 750; letter-spacing: -.045em; }
+.brand small { display: block; margin-top: 2px; color: #bfb8c7; font-size: 10px; line-height: 14px; }
+.brandCopy { padding: 56px 0; }
+.eyebrow { display: inline-flex; margin: 0 0 24px; border: 1px solid #504957; border-radius: 999px; background: rgb(255 255 255 / 8%); padding: 8px 13px; color: #d2cad9; font-size: 12px; line-height: 16px; font-weight: 650; }
+.brandHeadline { margin: 0; font-size: clamp(3.4rem, 5.3vw, 5.3rem); line-height: .99; letter-spacing: -.065em; font-weight: 760; }
+.brandHeadline span { color: #b9a7ef; }
+.brandLead { max-width: 435px; margin: 29px 0 0; color: #c7c0ce; font-size: 17px; line-height: 1.55; }
+.communityChip { display: inline-flex; max-width: 100%; align-items: center; gap: 14px; margin-top: 35px; border: 1px solid #595260; border-radius: 22px; background: rgb(255 255 255 / 8%); padding: 13px 18px; }
+.irmMark { display: grid; width: 46px; height: 46px; flex: none; place-items: center; border-radius: 14px; background: linear-gradient(145deg, #b69df1, #6347c0); color: #fff; font-size: 13px; font-weight: 750; }
+.communityChip strong, .communityChip small { display: block; }
+.communityChip strong { font-size: 14px; line-height: 19px; }
+.communityChip small { margin-top: 2px; color: #c7c0ce; font-size: 12px; }
+.brandFoot { margin: 0; color: #aaa2b2; font-size: 11px; letter-spacing: .04em; }
+.formSide { display: flex; min-width: 0; align-items: center; justify-content: center; padding: 36px clamp(26px, 6vw, 96px); }
+.formWrap { width: min(100%, 470px); }
+.mobileTop { display: none; }
+.formIntro { margin-bottom: 27px; }
+.formIntro h1 { margin: 0; font-size: clamp(2.2rem, 3vw, 2.7rem); line-height: 1.12; letter-spacing: -.055em; font-weight: 750; }
+.formIntro p { margin: 10px 0 0; color: var(--text-muted); font-size: 15px; line-height: 1.5; }
+.form { display: grid; gap: 17px; }
+.form button[type="submit"] { width: 100%; min-height: 54px; margin-top: 9px; }
+.form :global(.ui-label) { margin-bottom: 7px; }
+.form :global(.ui-field) { min-height: 52px; border-radius: 15px; }
+.form :global(.ui-field)::placeholder { color: var(--text-muted); }
+.form :global(.ui-field-error) { margin-top: 5px; }
+.fieldHint { margin: 6px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.4; }
+.nameRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.form :global(.ui-field):-webkit-autofill,
+.form :global(.ui-field):-webkit-autofill:hover,
+.form :global(.ui-field):-webkit-autofill:focus { -webkit-text-fill-color: var(--text); box-shadow: 0 0 0 100px var(--surface) inset; caret-color: var(--text); }
+.form :global(.ui-field[aria-invalid="true"]):-webkit-autofill { box-shadow: 0 0 0 100px var(--error-surface) inset; }
+.formAlt { margin-top: 16px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.formAlt a, .utilityLinks a { display: inline-flex; min-height: 44px; align-items: center; color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.utilityLinks { display: flex; align-items: center; justify-content: center; gap: 28px; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 13px; }
+.theme { display: flex; max-width: 310px; align-items: center; gap: 8px; margin: 10px auto 0; }
+.theme button:last-child { width: auto; min-width: 0; }
+.state { display: grid; justify-items: start; gap: 15px; }
+.state h1 { margin: 0; font-size: 2.1rem; line-height: 1.1; letter-spacing: -.045em; }
+.state p { margin: 0; color: var(--text-muted); line-height: 1.5; }
+.state a, .state button { min-height: 48px; }
+.success { border: 1px solid var(--success-border); border-radius: 20px; background: var(--success-surface); color: var(--success); padding: 23px; }
+.success h2 { margin: 0 0 9px; font-size: 19px; line-height: 1.3; }
+.success p { margin: 0 0 17px; font-size: 14px; line-height: 1.55; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .brandPanel { display: none; }
+  .formSide { display: block; padding: 0; }
+  .mobileTop { display: block; margin-bottom: 34px; }
+  .mobileBrand { display: inline-flex; min-height: 48px; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font-size: 18px; letter-spacing: -.04em; }
+  .formWrap { width: min(100%, 530px); margin: 0 auto; }
+  .page { padding: 25px clamp(16px, 5vw, 40px) 32px; }
+}
+@media (max-width: 540px) {
+  .page { padding: 20px 18px 28px; }
+  .mobileTop { margin-bottom: 26px; }
+  .formIntro { margin-bottom: 23px; }
+  .formIntro h1 { font-size: 2.2rem; }
+  .form { gap: 15px; }
+  .nameRow { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+}
+@media (max-width: 350px) { .page { padding-inline: 14px; } .formIntro h1 { font-size: 2rem; } }
+@media (prefers-reduced-motion: reduce) { .page *, .page *::before, .page *::after { transition: none !important; animation: none !important; } }

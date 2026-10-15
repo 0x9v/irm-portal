@@ -1,0 +1,46 @@
+.page { display: flex; flex-direction: column; gap: 18px; }
+.heading { min-width: 0; }
+.heading h1 { color: var(--text); font-size: clamp(24px, 4vw, 30px); font-weight: 760; line-height: 1.2; }
+.heading p { margin-top: 6px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.profileContent { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.profileContent[hidden] { display: none; }
+.identityCard, .detailsCard, .stateCard, .editCard, .securityCard, .membershipCard { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); }
+.membershipCard { padding: 22px; scroll-margin-top: 88px; }
+.identityCard { display: flex; align-items: center; gap: 18px; padding: 22px; }
+.identityText { flex: 1; min-width: 0; }
+.identityText h2 { overflow-wrap: anywhere; color: var(--text); font-size: 20px; font-weight: 740; line-height: 1.3; }
+.identityText p { margin-top: 4px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.detailsCard { padding: 22px; }
+.detailsHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.detailsCard h2, .stateCard h2, .editCard h2, .securityCard h2 { color: var(--text); font-size: 17px; font-weight: 720; line-height: 1.4; }
+.details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 28px; margin-top: 20px; }
+.details div { min-width: 0; }
+.details dt { color: var(--text-muted); font-size: 12px; font-weight: 650; line-height: 1.5; }
+.details dd { margin-top: 4px; overflow-wrap: anywhere; color: var(--text); font-size: 15px; line-height: 1.5; }
+.stateCard { padding: 22px; }
+.stateCard p { margin-top: 6px; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.stateAction { margin-top: 18px; }
+.editCard { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 22px; }
+.editIntro, .hint { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.form { width: 100%; display: flex; flex-direction: column; gap: 18px; }
+.field { min-width: 0; }
+.field input { width: 100%; }
+.hint { margin-top: 7px; overflow-wrap: anywhere; }
+.formActions { display: flex; flex-wrap: wrap; gap: 10px; }
+.securityCard { padding: 22px; }
+.securityIntro { margin-top: 10px; color: var(--text-muted); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.securityFormArea { margin-top: 18px; }
+.securityFormArea .form { margin-top: 18px; }
+.securityFeedback { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; margin-top: 18px; }
+.securityFeedback > div { width: 100%; }
+.passwordVisibility { display: flex; justify-content: flex-end; }
+.avatarControls { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; margin-top: 12px; }
+.avatarActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.avatarHint { max-width: 52ch; color: var(--text-muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.avatarControls > [role="alert"], .avatarControls > [role="status"] { width: 100%; }
+.avatarPreview { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; width: 100%; min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-secondary); }
+.avatarPreview h3 { color: var(--text); font-size: 14px; font-weight: 700; line-height: 1.4; }
+.avatarPreview p { margin-top: 4px; color: var(--text-muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.avatarPreview img { width: 112px; height: 112px; max-width: 100%; object-fit: cover; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); }
+.avatarPreviewFallback { min-height: 72px; }
+@media (max-width: 599px) { .identityCard, .detailsCard, .stateCard, .editCard, .securityCard, .membershipCard { padding: 18px; } .identityCard { align-items: flex-start; gap: 14px; } .details { grid-template-columns: minmax(0, 1fr); gap: 16px; } .formActions > button { flex: 1 1 130px; } }

@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchApi, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useAsyncScope } from "@/lib/useAsyncScope";
+import AnnouncementModerationAction from "@/components/AnnouncementModerationAction";
+import { RemovalLedger } from "@/lib/moderation";
 import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
-
-interface AnnouncementResponse {
-  id: string;
-  title: string;
-  content: string;
-  author_id: string;
-  created_at: string;
-}
+import PageContainer from "@/components/PageContainer";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import AnnouncementCard, { AnnouncementCardData } from "@/components/AnnouncementCard";
+import { ContentLoading, ContentEmpty } from "@/components/ContentState";
+import { PendingLabel } from "@/components/ui/Button";
+import styles from "@/components/Announcements.module.css";
 
 export default function AnnouncementsPage() {
-  const { capabilities, refresh } = useAuth();
-  const [announcements, setAnnouncements] = useState<AnnouncementResponse[]>([]);
+  const { user, membership, capabilities, isLoading: authLoading, membershipError, error: authError, refresh } = useAuth();
+  const [announcements, setAnnouncements] = useState<AnnouncementCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,40 +26,110 @@ export default function AnnouncementsPage() {
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formOutcomeUncertain, setFormOutcomeUncertain] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
-  const loadAnnouncements = async () => {
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef<number>(0);
+
+  const [removed] = useState(() => new RemovalLedger());
+  const [removalNotice, setRemovalNotice] = useState<string | null>(null);
+  const reconcileRemoval = (id: string, unavailable: boolean) => {
+    removed.remove(id);
+    setAnnouncements(prev => prev.filter(item => item.id !== id));
+    setRemovalNotice(unavailable ? "The announcement is unavailable and has been removed from this view." : "announcement removed from community view.");
+  };
+
+  const isEligible = !authLoading && !!user && !membershipError && !authError && membership?.status === "ACTIVE";
+
+  const captureScope = useAsyncScope(`${user?.id}:${isEligible}`);
+
+  const loadAnnouncements = useCallback(async () => {
+    const isCurrent = captureScope();
+    if (!isEligible) {
+      setAnnouncements([]);
+      setTitle(""); setContent(""); setFormError(null); setFormOutcomeUncertain(false); setFormSuccess(null);
+      setLoading(false);
+      return;
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentRequestId = ++requestIdRef.current;
+
+    setLoading(true);
+    setError(null);
     try {
-      const data = await fetchApi<AnnouncementResponse[]>("/api/v1/communities/irm/announcements");
-      setAnnouncements(data);
+      const data = await fetchApi<AnnouncementCardData[]>(
+        "/api/v1/communities/irm/announcements",
+        { signal: controller.signal }
+      );
+      if (isCurrent() && !controller.signal.aborted && currentRequestId === requestIdRef.current) {
+        setAnnouncements(removed.filter(data));
+      }
     } catch (err) {
+      if (!isCurrent() || controller.signal.aborted || currentRequestId !== requestIdRef.current) return;
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
       if (err instanceof ApiError) {
+        if (err.status === 401 || err.status === 403) void refresh();
         if (err.status === 401) {
+          setAnnouncements([]);
           setError("Unauthorized. Please log in.");
         } else if (err.status === 403) {
+          setAnnouncements([]);
           setError("Forbidden. You must be an active member of this community to view announcements.");
         } else {
-          setError(`Failed to load announcements: ${err.message}`);
+          setError("Announcements could not be loaded. Please try again.");
         }
       } else if (err instanceof Error) {
-        setError(err.message);
+        setError("Announcements could not be loaded. Please try again.");
       } else {
         setError("An unexpected error occurred.");
       }
     } finally {
-      setLoading(false);
+      if (isCurrent() && !controller.signal.aborted && currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [isEligible, removed, captureScope, refresh]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAnnouncements();
-  }, []);
+    setTitle(""); setContent(""); setFormError(null); setFormOutcomeUncertain(false); setFormSuccess(null); setSubmitting(false);
+  }, [user?.id, isEligible]);
+
+  useEffect(() => {
+    if (isEligible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadAnnouncements();
+    } else {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setAnnouncements([]);
+      setTitle(""); setContent(""); setFormError(null); setFormOutcomeUncertain(false); setFormSuccess(null);
+      setLoading(false);
+    }
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [isEligible, loadAnnouncements]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isEligible || submitting || !capabilities?.create_announcements) return;
+    const isCurrent = captureScope();
     setSubmitting(true);
     setFormError(null);
+    setFormOutcomeUncertain(false);
     setFormSuccess(null);
 
     try {
@@ -66,170 +137,163 @@ export default function AnnouncementsPage() {
         method: "POST",
         body: JSON.stringify({ title, content }),
       });
+      if (!isCurrent()) return;
       setFormSuccess("Announcement created successfully.");
       setTitle("");
       setContent("");
-      // Refresh list
-      loadAnnouncements();
+      await loadAnnouncements();
     } catch (err) {
+      if (!isCurrent()) return;
       if (err instanceof ApiError) {
-        if (err.status === 403) {
+        if (err.status === 401 || err.status === 403) {
           setFormError("Forbidden. You do not have permission to create announcements.");
           await refresh(); // Refresh context and hide the form if revoked
         } else if (err.status === 422) {
-          setFormError(`Validation error: ${err.message}`);
+          setFormError("Check the title and content, then try again.");
         } else {
-          setFormError(`Creation failed: ${err.message}`);
+          setFormOutcomeUncertain(true);
+          setFormError("We could not confirm whether the announcement was posted. Check the list before submitting again.");
         }
       } else if (err instanceof Error) {
-        setFormError(err.message);
+        setFormOutcomeUncertain(true);
+        setFormError("We could not confirm whether the announcement was posted. Check the list before submitting again.");
       } else {
-        setFormError("An unexpected error occurred.");
+        setFormOutcomeUncertain(true);
+        setFormError("We could not confirm whether the announcement was posted. Check the list before submitting again.");
       }
     } finally {
-      setSubmitting(false);
+      if (isCurrent()) setSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-8 font-sans max-w-4xl mx-auto mt-10 text-gray-600">
-        Loading announcements...
-      </div>
-    );
-  }
+  useEffect(() => {
+    const requestCounter = requestIdRef;
+    return () => { removed.clear(); requestCounter.current++; };
+  }, [user?.id, isEligible, removed]);
 
-  if (error) {
-    const isGuest = error.toLowerCase().includes("log in") || error.toLowerCase().includes("unauthorized");
-    const isMemberRequired = error.toLowerCase().includes("active member") || error.toLowerCase().includes("forbidden");
-
-    return (
-      <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
-        <div className="mb-4 text-sm">
-          <Link href="/communities/irm/modules" className="text-gray-500 hover:text-gray-900 hover:underline">
-            &larr; Back to Modules
-          </Link>
-        </div>
-        {isGuest ? (
-          <AccessDeniedGuidance isGuest={true} returnHref="/communities/irm/modules" returnLabel="Modules" />
-        ) : isMemberRequired ? (
-          <AccessDeniedGuidance membershipStatus="PENDING" returnHref="/communities/irm/modules" returnLabel="Modules" />
-        ) : (
-          <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg">
-            {error}
-          </div>
-        )}
-      </div>
-    );
-  }
+  const isGuest = !user && !authLoading;
+  const isNonActive = !authLoading && !!user && !membershipError && !authError && membership?.status !== "ACTIVE";
 
   return (
-    <div className="p-4 sm:p-8 font-sans max-w-4xl mx-auto mt-6 sm:mt-10">
+    <PageContainer width="wide">
+      {removalNotice && <FeedbackMessage type="info" message={removalNotice} />}
       {/* Breadcrumb Navigation */}
-      <nav className="mb-4 text-sm flex flex-wrap items-center gap-1.5 text-gray-500" aria-label="Breadcrumb">
-        <Link href="/" className="hover:text-gray-900 hover:underline">
-          IRM Hub
-        </Link>
-        <span>/</span>
-        <Link href="/communities/irm/modules" className="hover:text-gray-900 hover:underline">
-          Modules
-        </Link>
-        <span>/</span>
-        <span className="text-gray-900 font-medium">Announcements</span>
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: "Home", href: "/" },
+          { label: "Announcements" },
+        ]}
+      />
 
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+      <div className={`${styles.pageHeader} flex flex-wrap justify-between items-end gap-4`}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">IRM Announcements</h1>
-          <p className="text-sm text-gray-500 mt-1">Official updates and notices for the IRM community.</p>
+          <p className="ui-eyebrow">Community</p>
+          <h1 className={`${styles.heading} text-text`}>Announcements</h1>
+          <p className="ui-helper mt-2">Updates published for active IRM members.</p>
         </div>
-        <div className="flex gap-4 items-center text-sm">
-          <Link href="/communities/irm/modules" className="text-blue-600 hover:underline font-medium">
-            Modules
-          </Link>
-          <Link href="/communities/irm/membership" className="text-blue-600 hover:underline font-medium">
-            Membership
-          </Link>
-        </div>
+        {isEligible && capabilities?.create_announcements &&
+          <a href="#post-announcement" className="ui-button ui-button--secondary">Post an announcement</a>}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          {announcements.length === 0 ? (
-            <div className="text-gray-600 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
-              No announcements found.
-            </div>
-          ) : (
-            announcements.map((announcement) => (
-              <div key={announcement.id} className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-2">{announcement.title}</h2>
-                <div className="text-sm text-gray-500 mb-4 flex flex-col gap-1">
-                  <span>Posted: {new Date(announcement.created_at).toLocaleString()}</span>
-                </div>
-                <div className="text-gray-800 whitespace-pre-wrap">{announcement.content}</div>
+      {authLoading ? (
+        <ContentLoading label="Loading announcements…" kind="announcement" count={2} />
+      ) : isGuest ? (
+        <AccessDeniedGuidance isGuest={true} returnHref="/communities/irm/modules" returnLabel="Modules" />
+      ) : membershipError || authError ? (
+        <div className="my-4">
+          <FeedbackMessage
+            type="error"
+            message="Membership could not be verified. Retry to check access."
+            onRetry={refresh}
+            retryLabel="Retry Verification"
+          />
+        </div>
+      ) : isNonActive ? (
+        <AccessDeniedGuidance membershipStatus={membership?.status} returnHref="/communities/irm/modules" returnLabel="Modules" />
+      ) : loading ? (
+        <ContentLoading label="Loading announcements…" kind="announcement" count={2} />
+      ) : error ? (
+        <div className="my-4">
+          <FeedbackMessage
+            type="error"
+            message={error}
+            onRetry={loadAnnouncements}
+            retryLabel="Retry Loading"
+          />
+        </div>
+      ) : (
+        <div className={styles.listLayout}>
+          <div className={styles.announcementList}>
+            {announcements.length === 0 ? (
+              <ContentEmpty title="No announcements published yet." description="IRM updates will appear here when they are published." />
+            ) : (
+              announcements.map((announcement, index) => (
+                <AnnouncementCard key={announcement.id} announcement={announcement} headingLevel="h2"
+                  variant={index === 0 ? "featured" : "default"}
+                  action={<AnnouncementModerationAction kind="announcement" id={announcement.id} context={announcement.title}
+                    onRemoved={unavailable => reconcileRemoval(announcement.id, unavailable)} onCheck={loadAnnouncements} />} />
+              ))
+            )}
+          </div>
+
+          {capabilities?.create_announcements && (
+            <div id="post-announcement" className={styles.createSection}>
+              <div className="p-6 bg-surface border border-border rounded-surface shadow-none space-y-4">
+                <h2 className="text-lg font-bold text-text">Post Announcement</h2>
+
+                {formSuccess && (
+                  <FeedbackMessage type="success" message={formSuccess} />
+                )}
+
+                {formError && (
+                  <FeedbackMessage type="error" message={formError} onRetry={formOutcomeUncertain ? loadAnnouncements : undefined} retryLabel="Check announcements" />
+                )}
+
+                <form onSubmit={handleCreate} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-text mb-1" htmlFor="announcement-title">
+                      Title
+                    </label>
+                    <input
+                      id="announcement-title"
+                      type="text"
+                      required
+                      className="w-full p-2.5 bg-surface border border-border rounded-control text-text focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent text-sm"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Title of announcement"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-text mb-1" htmlFor="announcement-content">
+                      Content
+                    </label>
+                    <textarea
+                      id="announcement-content"
+                      required
+                      rows={5}
+                      className="w-full p-2.5 bg-surface border border-border rounded-control text-text focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent text-sm"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Announcement body text..."
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    aria-busy={submitting}
+                    className="ui-button ui-button--primary w-full"
+                  >
+                    <PendingLabel pending={submitting} idle="Post Announcement" busy="Posting…" />
+                  </button>
+                </form>
               </div>
-            ))
+            </div>
           )}
         </div>
-
-        {capabilities?.create_announcements && (
-          <div>
-            <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm sticky top-8">
-              <h3 className="text-lg font-semibold mb-4">Post Announcement</h3>
-              
-              {formSuccess && (
-                <div className="mb-4 p-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded">
-                  {formSuccess}
-                </div>
-              )}
-              
-              {formError && (
-                <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded">
-                  {formError}
-                </div>
-              )}
-
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="title">
-                    Title
-                  </label>
-                  <input
-                    id="title"
-                    type="text"
-                    required
-                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="content">
-                    Content
-                  </label>
-                  <textarea
-                    id="content"
-                    required
-                    rows={4}
-                    className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? "Posting..." : "Post Announcement"}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      )}
+    </PageContainer>
   );
 }

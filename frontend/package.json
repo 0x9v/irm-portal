@@ -6,10 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "release:acceptance": "node scripts/release-acceptance.mjs",
+    "copy-pdf-worker": "node -e \"const fs=require('fs'); fs.copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs', 'public/pdf.worker.min.mjs'); console.log('Copied pdf.worker.min.mjs successfully.');\"",
+    "prebuild": "npm run copy-pdf-worker"
   },
   "dependencies": {
     "next": "16.3.6",
+    "pdfjs-dist": "^4.10.38",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
