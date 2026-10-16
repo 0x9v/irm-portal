@@ -118,7 +118,8 @@ export default function DocumentReader({
   }, []);
 
   useEffect(() => {
-    if (format !== "pdf") return;
+    // The viewer ref is mounted only in READY; attach the observer then.
+    if (format !== "pdf" || status !== "READY") return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -141,7 +142,7 @@ export default function DocumentReader({
       window.removeEventListener("resize", measure);
       window.removeEventListener("orientationchange", measure);
     };
-  }, [format, measureReaderWidth]);
+  }, [format, status, measureReaderWidth]);
 
   const viewUrl = `${API_URL}/api/v1/documents/${documentId}/view`;
 

@@ -145,16 +145,19 @@ test.describe('Task 2.2: Approved Document Reader Inside IRM Hub', () => {
     const downloadButton = page.getByRole('button', { name: /Download Original/i });
     await expect(downloadButton).toBeVisible();
 
+    // The first fit must finish so the reader can render and expose zoom controls.
+    await expect(page.locator('.ui-reader-toolbar').getByText('Fitting…')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zoom in' })).toBeEnabled();
+
     // 3. Verify Canvas rendered and has non-empty visual pixel data
     const canvas = page.locator('canvas[data-testid="pdf-canvas"]');
     await expect(canvas).toBeVisible();
-    const isCanvasNonEmpty = await canvas.evaluate((c: HTMLCanvasElement) => {
+    await expect.poll(() => canvas.evaluate((c: HTMLCanvasElement) => {
       const ctx = c.getContext('2d');
       if (!ctx) return false;
       const imgData = ctx.getImageData(0, 0, Math.min(c.width, 100), Math.min(c.height, 100));
       return imgData.data.some((channel) => channel !== 0);
-    });
-    expect(isCanvasNonEmpty).toBe(true);
+    })).toBe(true);
 
     // 4. Verify text layer has Page 1 text
     await expect(page.getByText('Page 1 of 2')).toBeVisible();
