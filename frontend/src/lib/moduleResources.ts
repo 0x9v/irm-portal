@@ -1,24 +1,27 @@
 import { API_URL } from "@/lib/api";
-import { isDocumentSource, isDocumentType, isDocumentReturnContext, type DocumentReturnContext } from "@/lib/documentPresentation";
+import { isDocumentSource, isDocumentType, isDocumentReturnContext, type DocumentReturnContext, type DocumentTypeValue } from "@/lib/documentPresentation";
 
 export const RESOURCE_KINDS = ["PDF", "IMAGE", "YOUTUBE", "LINK"] as const;
 export type ResourceKind = (typeof RESOURCE_KINDS)[number];
-export type ResourceFilters = { q: string; kind: ResourceKind | ""; source: "STUDENT" | "OFFICIAL" | ""; type: string };
+export type ResourceFilters = { q: string; category: DocumentTypeValue | ""; kind: ResourceKind | ""; source: "STUDENT" | "OFFICIAL" | "" };
 
 export type ResourceItem = {
   id: string; module_id: string; kind: ResourceKind; title: string; description: string | null;
   source: "STUDENT" | "OFFICIAL"; status: "APPROVED" | "PENDING" | "REJECTED";
   created_at: string; updated_at: string;
-  document_type?: string; preview_url?: string; video_id?: string; url?: string;
+  category?: DocumentTypeValue | null; document_type?: string; preview_url?: string; video_id?: string; url?: string;
 };
 export type ResourceFeed = { items: ResourceItem[]; next_cursor: string | null };
 export type PendingResourceItem = ResourceItem & {
   module_slug: string; module_name: string; is_uploader: boolean;
   my_vote: "YES" | "NO" | null; can_vote: boolean; can_approve: boolean;
+  can_delete: boolean;
   full_resource_access: boolean;
   preview: { url: string; media_type?: "image/png" | "image/webp" };
 };
 export type PendingResourceFeed = { items: PendingResourceItem[]; next_cursor: string | null };
+export type MyResourceItem = ResourceItem & { module_slug: string; module_name: string; can_delete: boolean };
+export type MyResourceFeed = { items: MyResourceItem[]; next_cursor: string | null };
 
 export function isResourceKind(value: string | null): value is ResourceKind {
   return RESOURCE_KINDS.some(kind => kind === value);
@@ -27,14 +30,15 @@ export function isResourceKind(value: string | null): value is ResourceKind {
 export function readResourceUrl(search: string): { filters: ResourceFilters; from: DocumentReturnContext } {
   const params = new URLSearchParams(search);
   const q = (params.get("q") ?? "").trim();
-  const rawType = params.get("type");
+  const rawCategory = params.get("category");
+  const legacyType = params.get("type");
   const rawKind = params.get("kind");
   const rawSource = params.get("source");
   const rawFrom = params.get("from");
-  const type = isDocumentType(rawType) ? rawType : "";
+  const category = isDocumentType(rawCategory) ? rawCategory : isDocumentType(legacyType) ? legacyType : "";
   const kind = isResourceKind(rawKind) ? rawKind : "";
   return {
-    filters: { q: q.length <= 100 ? q : "", kind: type ? "PDF" : kind, type,
+    filters: { q: q.length <= 100 ? q : "", category, kind: !isDocumentType(rawCategory) && isDocumentType(legacyType) ? "PDF" : kind,
       source: isDocumentSource(rawSource) ? rawSource : "" },
     from: isDocumentReturnContext(rawFrom) ? rawFrom : "module",
   };
@@ -43,8 +47,8 @@ export function readResourceUrl(search: string): { filters: ResourceFilters; fro
 export function resourceModuleHref(slug: string, filters: ResourceFilters, from: DocumentReturnContext): string {
   const params = new URLSearchParams();
   if (filters.q.trim() && filters.q.trim().length <= 100) params.set("q", filters.q.trim());
+  if (filters.category) params.set("category", filters.category);
   if (filters.kind) params.set("kind", filters.kind);
-  if (filters.type && filters.kind === "PDF") params.set("type", filters.type);
   if (filters.source) params.set("source", filters.source);
   if (from !== "module") params.set("from", from);
   return `/communities/irm/modules/${encodeURIComponent(slug)}${params.size ? `?${params}` : ""}`;
@@ -53,6 +57,7 @@ export function resourceModuleHref(slug: string, filters: ResourceFilters, from:
 export function resourceQuery(filters: ResourceFilters, after?: string): string {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
+  if (filters.category) params.set("category", filters.category);
   if (filters.kind) params.set("kind", filters.kind);
   if (filters.source) params.set("source", filters.source);
   params.set("limit", "20");
@@ -67,7 +72,20 @@ export function validFeed(value: unknown, moduleId: string): value is ResourceFe
   return feed.items.every(item => item && typeof item.id === "string" && item.id && item.module_id === moduleId &&
     isResourceKind(item.kind) && item.status === "APPROVED" && typeof item.title === "string" &&
     (item.source === "STUDENT" || item.source === "OFFICIAL") && typeof item.created_at === "string" &&
-    (item.kind === "PDF" ? typeof item.document_type === "string" : item.kind === "IMAGE" ? typeof item.preview_url === "string" : typeof item.url === "string"));
+    validResourceCategory(item) &&
+    (item.kind === "PDF" ? true : item.kind === "IMAGE" ? typeof item.preview_url === "string" : typeof item.url === "string"));
+}
+
+function validResourceCategory(item: ResourceItem): boolean {
+  if (item.category !== undefined && item.category !== null && !isDocumentType(item.category)) return false;
+  if (item.kind === "PDF") return isDocumentType(item.document_type) &&
+    (item.category === undefined || item.category === item.document_type);
+  return true;
+}
+
+export function resourceCategory(item: Pick<ResourceItem, "kind" | "category" | "document_type">): DocumentTypeValue | null {
+  if (item.category !== undefined) return item.category;
+  return item.kind === "PDF" && isDocumentType(item.document_type) ? item.document_type : null;
 }
 
 export function pendingResourcePreviewUrl(community: string, item: PendingResourceItem): string | null {
@@ -88,16 +106,35 @@ export function validPendingFeed(value: unknown, community = "irm"): value is Pe
       typeof item.module_slug !== "string" || !item.module_slug || typeof item.module_name !== "string" ||
       typeof item.created_at !== "string" || typeof item.is_uploader !== "boolean" ||
       typeof item.can_vote !== "boolean" || typeof item.can_approve !== "boolean" ||
+      typeof item.can_delete !== "boolean" ||
       typeof item.full_resource_access !== "boolean" ||
+      !validResourceCategory(item) ||
       !(item.my_vote === null || item.my_vote === "YES" || item.my_vote === "NO") ||
       !item.preview || typeof item.preview.url !== "string") return false;
     if ((item.is_uploader || item.my_vote !== null) && item.can_vote) return false;
-    if (item.kind === "PDF") return typeof item.document_type === "string" && item.preview.media_type === "image/png" &&
+    if (item.kind === "PDF") return item.preview.media_type === "image/png" &&
       item.full_resource_access === (item.my_vote === "YES") && !!pendingResourcePreviewUrl(community, item);
     if (item.kind === "IMAGE") return item.full_resource_access && !!pendingResourcePreviewUrl(community, item);
     if (!item.full_resource_access) return false;
     return item.preview.url === item.url && !!safeExternalUrl(item);
   });
+}
+
+export function validMyResourceFeed(value: unknown): value is MyResourceFeed {
+  if (!value || typeof value !== "object") return false;
+  const feed = value as Partial<MyResourceFeed>;
+  if (!Array.isArray(feed.items) || !(feed.next_cursor === null || typeof feed.next_cursor === "string")) return false;
+  return feed.items.every(item => item && typeof item.id === "string" && !!item.id &&
+    typeof item.module_id === "string" && !!item.module_id &&
+    typeof item.module_slug === "string" && !!item.module_slug &&
+    typeof item.module_name === "string" && !!item.module_name &&
+    isResourceKind(item.kind) && typeof item.title === "string" && !!item.title &&
+    (item.status === "PENDING" || item.status === "REJECTED" || item.status === "APPROVED") &&
+    (item.source === "STUDENT" || item.source === "OFFICIAL") &&
+    typeof item.created_at === "string" && typeof item.can_delete === "boolean" &&
+    item.can_delete === (item.status !== "APPROVED") && validResourceCategory(item) &&
+    (item.kind === "PDF" ? true : item.kind === "IMAGE" ? typeof item.preview_url === "string"
+      : !!safeExternalUrl(item)));
 }
 
 export function resourcePreviewUrl(community: string, item: Pick<ResourceItem, "id" | "preview_url">): string | null {

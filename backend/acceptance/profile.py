@@ -53,7 +53,9 @@ MODULE_RESOURCE_API_SUITES = ["tests/api/v1/test_module_resources.py",
                               "tests/api/v1/test_document_voting_thresholds.py",
                               "tests/api/v1/test_moderator_permissions.py"]
 MODULE_RESOURCE_PG_SUITES = ["tests/services/test_module_resource_migration_pg.py",
-                             "tests/services/test_module_resource_review_pg.py"]
+                             "tests/services/test_module_resource_review_pg.py",
+                             "tests/services/test_resource_removal_migration_pg.py",
+                             "tests/services/test_delegate_publication_pg.py"]
 POST_REPLY_IMAGES_PG_SUITES = ["tests/services/test_post_reply_images_pg.py"]
 
 

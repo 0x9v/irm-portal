@@ -9,6 +9,7 @@ const item = {
 };
 
 async function auth(page: Page, userId = 'user-1') {
+  await page.route('**/api/**', route => route.abort());
   await page.route(`${api}/auth/me`, route => route.fulfill({ status: 200, json: {
     id: userId, username: userId, email: `${userId}@example.test`, first_name: 'Account', family_name: 'Name',
   } }));
@@ -21,9 +22,10 @@ test('approved document save remains authoritative after reload and can be remov
   await page.route(`${api}/communities/irm/modules/algebre-1`, route => route.fulfill({ status: 200, json: {
     id: 'mod-1', community_id: 'community-1', name: 'Algebra I', slug: 'algebre-1', created_at: '2026-01-01', updated_at: '2026-01-01',
   } }));
-  await page.route(`${api}/communities/irm/modules/algebre-1/documents`, route => route.fulfill({ status: 200, json: [
-    { id: docId, title: item.title, module_id: 'mod-1', uploader_id: 'uploader-1', type: 'COURSE', source: 'OFFICIAL', status: 'APPROVED', created_at: item.document_created_at, updated_at: item.document_created_at },
-  ] }));
+  await page.route(`${api}/communities/irm/modules/algebre-1/resources**`, route => route.fulfill({ status: 200, json: { items: [
+    { id: docId, title: item.title, module_id: 'mod-1', kind: 'PDF', category: 'COURSE', document_type: 'COURSE', description: null,
+      source: 'OFFICIAL', status: 'APPROVED', created_at: item.document_created_at, updated_at: item.document_created_at },
+  ], next_cursor: null } }));
   await page.route(`${api}/communities/irm/documents/${docId}/saved`, async route => {
     if (route.request().method() === 'GET') return route.fulfill({ status: 200, json: { saved } });
     if (route.request().method() === 'PUT') { saved = true; return route.fulfill({ status: 200, json: { saved } }); }
@@ -59,7 +61,7 @@ test('saved list renders safe approved links and remove actions', async ({ page 
   await expect(page.getByRole('heading', { name: item.title })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open document' })).toHaveAttribute('href', /algebre-1\/documents\/doc-approved-1/);
   await expect(page.getByRole('button', { name: 'Remove from saved' })).toBeVisible();
-  await expect(page.getByText('Course')).toBeVisible();
+  await expect(page.getByText('Cours')).toBeVisible();
 });
 
 test('load more appends pages and uncertain removal checks the list before another request', async ({ page }) => {

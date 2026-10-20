@@ -15,19 +15,15 @@ import {
   draftError, fileError, submissionBody, validCreation, type ResourceCreated,
   type ResourceDraft, type ResourceKind, type ResourceSource,
 } from "@/lib/moduleResourceSubmission";
+import { DOCUMENT_CATEGORY_OPTIONS, documentTypeLabel, type DocumentTypeValue } from "@/lib/documentPresentation";
 
-const DOCUMENT_TYPES = [
-  { value: "COURSE", label: "Course" }, { value: "TD", label: "TD (Tutorial)" },
-  { value: "TP", label: "TP (Practical)" }, { value: "EXAM", label: "Exam" },
-  { value: "SOLUTION", label: "Solution" }, { value: "OTHER", label: "Other" },
-];
 const KINDS: { value: ResourceKind; label: string }[] = [
-  { value: "PDF", label: "Document" }, { value: "IMAGE", label: "Image" },
-  { value: "YOUTUBE", label: "YouTube" }, { value: "LINK", label: "Useful link" },
+  { value: "PDF", label: "PDF" }, { value: "IMAGE", label: "Image" },
+  { value: "YOUTUBE", label: "YouTube" }, { value: "LINK", label: "Lien" },
 ];
 
 function emptyDraft(): ResourceDraft {
-  return { kind: "PDF", title: "", description: "", source: "STUDENT", documentType: "COURSE", file: null, url: "" };
+  return { kind: "PDF", title: "", description: "", source: "STUDENT", category: "", file: null, url: "" };
 }
 
 function ResourceForm({ moduleSlug, mod, membership, officialAllowed }: {
@@ -93,7 +89,7 @@ function ResourceForm({ moduleSlug, mod, membership, officialAllowed }: {
         `/api/v1/communities/irm/modules/${encodeURIComponent(moduleSlug)}/resources`,
         { method: "POST", body: submissionBody(submitted), signal: controller.signal }, 201,
       );
-      if (!validCreation(result, submitted, mod.id)) throw new Error("Unverified creation response");
+      if (!validCreation(result, submitted, mod.id, membership.role)) throw new Error("Unverified creation response");
       if (controller.signal.aborted) return;
       setCreated(result);
       changePreview(null);
@@ -142,19 +138,29 @@ function ResourceForm({ moduleSlug, mod, membership, officialAllowed }: {
     {created ? <div className="ui-surface space-y-4">
       <FeedbackMessage type="success" message={created.status === "PENDING"
         ? "Resource submitted for community review and voting. It is not published yet."
-        : "Official resource published."} />
+        : created.source === "STUDENT" ? "Student resource published." : "Official resource published."} />
       <p className="text-sm text-text">{created.title}</p>
+      <p className="text-sm text-text-subtle">Source: {created.source === "STUDENT" ? "Student" : "Official"}</p>
+      <p className="text-sm text-text-subtle">Catégorie: {documentTypeLabel(created.category)}</p>
       <button type="button" className={buttonStyles("secondary", "min-h-[44px]")} onClick={reset}>Submit another resource</button>
     </div> : <form onSubmit={submit} className="ui-surface space-y-6 min-w-0" aria-busy={pending}>
       <div className="rounded-control border border-border bg-surface-secondary p-4 text-sm text-text">
-        {draft.source === "STUDENT" ? "Student submissions enter community review and voting. Your resource is not published until approved, and you cannot vote on your own submission."
+        {draft.source === "STUDENT" ? membership.role === "DELEGATE"
+          ? "As the current Delegate, this student resource publishes immediately after confirmation and remains a student resource."
+          : "Student submissions enter community review and voting. Your resource is not published until approved, and you cannot vote on your own submission."
           : "Official submissions publish immediately after confirmation."}
       </div>
       {feedback && <FeedbackMessage type={feedback.type} message={feedback.message} />}
       {uncertain && <button type="button" className={buttonStyles("secondary", "min-h-[44px]")} onClick={() => setUncertain(false)}>
         Edit draft for a new attempt
       </button>}
-      <div><label className="ui-label" htmlFor="resource-kind">Resource kind</label>
+      <div><label className="ui-label" htmlFor="resource-category">Catégorie</label>
+        <select id="resource-category" className="ui-field min-h-[44px]" value={draft.category} required disabled={locked}
+          onChange={event => setDraft(current => ({ ...current, category: event.target.value as DocumentTypeValue | "" }))}>
+          <option value="">Choisir une catégorie</option>
+          {DOCUMENT_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select></div>
+      <div><label className="ui-label" htmlFor="resource-kind">Format</label>
         <select id="resource-kind" className="ui-field min-h-[44px]" value={draft.kind} disabled={locked}
           onChange={event => selectKind(event.target.value as ResourceKind)}>
           {KINDS.map(kind => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
@@ -162,7 +168,9 @@ function ResourceForm({ moduleSlug, mod, membership, officialAllowed }: {
       {showSource && <div><label className="ui-label" htmlFor="resource-source">Submit as</label>
         <select id="resource-source" className="ui-field min-h-[44px]" value={draft.source} disabled={locked}
           onChange={event => setDraft(current => ({ ...current, source: event.target.value as ResourceSource }))}>
-          {sourceOptions.map(source => <option key={source} value={source}>{source === "STUDENT" ? "Student contribution (review and voting)" : "Official (publish immediately)"}</option>)}
+          {sourceOptions.map(source => <option key={source} value={source}>{source === "STUDENT"
+            ? membership.role === "DELEGATE" ? "Student contribution (publish immediately)" : "Student contribution (review and voting)"
+            : "Official (publish immediately)"}</option>)}
         </select></div>}
       <div><label className="ui-label" htmlFor="resource-title">Title</label>
         <input id="resource-title" className="ui-field min-h-[44px]" required maxLength={255} value={draft.title} disabled={locked}
@@ -170,11 +178,6 @@ function ResourceForm({ moduleSlug, mod, membership, officialAllowed }: {
       <div><label className="ui-label" htmlFor="resource-description">Description <span className="text-text-subtle">(optional)</span></label>
         <textarea id="resource-description" className="ui-field min-h-[88px]" maxLength={2000} value={draft.description} disabled={locked}
           onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} /></div>
-      {draft.kind === "PDF" && <div><label className="ui-label" htmlFor="resource-type">Document type</label>
-        <select id="resource-type" className="ui-field min-h-[44px]" value={draft.documentType} disabled={locked}
-          onChange={event => setDraft(current => ({ ...current, documentType: event.target.value }))}>
-          {DOCUMENT_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-        </select></div>}
       {(draft.kind === "PDF" || draft.kind === "IMAGE") && <div className="min-w-0">
         <label className="ui-label" htmlFor="resource-file">{draft.kind === "PDF" ? "PDF file" : "Image file"}</label>
         <input key={draft.kind} id="resource-file" ref={inputRef} type="file" required className="ui-field min-h-[44px] max-w-full"

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Recently opened documents', () => {
   test('supports retry, cursor pagination, and clears rows after an account switch', async ({ page }) => {
+    await page.route('**/api/**', route => route.abort());
     let userId = 'reader-one';
     await page.route('**/api/v1/auth/me', (route) => route.fulfill({
       status: 200,
@@ -43,7 +44,7 @@ test.describe('Recently opened documents', () => {
     await page.getByRole('button', { name: 'Retry' }).click();
     await expect(page.getByRole('heading', { name: 'Real Recent Document' })).toBeVisible();
     await expect(page.getByText('Systems Programming').first()).toBeVisible();
-    await expect(page.getByText('Course').first()).toBeVisible();
+    await expect(page.getByText('Cours').first()).toBeVisible();
     await expect(page.getByText('Official').first()).toBeVisible();
     await expect(page.getByText('Last opened')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Continue reading' })).toHaveAttribute('href', /systems-programming\/documents\/document-1$/);

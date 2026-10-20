@@ -33,6 +33,11 @@ from app.schemas.module_resource import (
     PendingImageResourceResponse,
     PendingYoutubeResourceResponse,
     PendingLinkResourceResponse,
+    MyResourceFeedResponse,
+    MyPdfResourceResponse,
+    MyImageResourceResponse,
+    MyYoutubeResourceResponse,
+    MyLinkResourceResponse,
     ResourceApprovalResponse,
     ResourceVoteResponse,
     PdfResourceResponse,
@@ -46,6 +51,7 @@ from app.schemas.module_resource import (
 from app.services.module import get_community_module
 from app.services.module_resource import create_image_resource, create_url_resource, list_approved_resources, read_resource_preview
 from app.services.module_resource import approve_pending_resource, cast_resource_vote, list_pending_resources
+from app.services.module_resource import can_remove_resource, list_my_resources, remove_resource
 from app.services.document import upload_document
 from app.schemas.document_vote import DocumentVoteCreate
 
@@ -56,7 +62,7 @@ PRIVATE_HEADERS = {"Cache-Control": "private, no-store"}
 
 def _resource_response(doc: Document, community_slug: str) -> ResourceResponse:
     common = dict(
-        id=doc.id, module_id=doc.module_id, kind=doc.resource_kind,
+        id=doc.id, module_id=doc.module_id, kind=doc.resource_kind, category=doc.type,
         title=doc.title, description=doc.description, source=doc.source,
         status=doc.status, created_at=doc.created_at, updated_at=doc.updated_at,
     )
@@ -87,6 +93,7 @@ def _pending_resource_response(doc: Document, module: Module, vote,
         my_vote=vote.vote if vote is not None else None,
         can_vote=doc.uploader_id != membership.user_id and vote is None,
         can_approve=membership.role in (MembershipRole.MODERATOR, MembershipRole.DELEGATE),
+        can_delete=can_remove_resource(doc, membership),
         full_resource_access=(doc.resource_kind != ResourceKind.PDF
                               or vote is not None and vote.vote.value == "YES"),
     )
@@ -99,6 +106,22 @@ def _pending_resource_response(doc: Document, module: Module, vote,
         return PendingYoutubeResourceResponse(**base, **state, preview={"url": base["url"]})
     if doc.resource_kind == ResourceKind.LINK:
         return PendingLinkResourceResponse(**base, **state, preview={"url": base["url"]})
+    raise HTTPException(status_code=500, detail="Resource data is invalid")
+
+
+def _my_resource_response(doc: Document, module: Module, community_slug: str,
+                          membership: Membership):
+    base = _resource_response(doc, community_slug).model_dump()
+    state = dict(module_slug=module.slug, module_name=module.name,
+                 can_delete=can_remove_resource(doc, membership))
+    if doc.resource_kind == ResourceKind.PDF:
+        return MyPdfResourceResponse(**base, **state)
+    if doc.resource_kind == ResourceKind.IMAGE:
+        return MyImageResourceResponse(**base, **state)
+    if doc.resource_kind == ResourceKind.YOUTUBE:
+        return MyYoutubeResourceResponse(**base, **state)
+    if doc.resource_kind == ResourceKind.LINK:
+        return MyLinkResourceResponse(**base, **state)
     raise HTTPException(status_code=500, detail="Resource data is invalid")
 
 
@@ -167,7 +190,8 @@ async def create_module_resource(
                 create_url_resource, db, module, current_user.id, membership,
                 kind=create_data.kind, title=create_data.title,
                 description=create_data.description, url=create_data.url,
-                requested_source=create_data.source,
+                requested_source=create_data.source, category=create_data.type,
+                raw_token=request.cookies.get(settings.session_cookie_name),
             )
         except ModuleResourceInputError:
             raise HTTPException(status_code=422, detail="Invalid resource URL") from None
@@ -214,6 +238,7 @@ async def create_module_resource(
             doc = await run_in_threadpool(
                 upload_document, db, module, current_user.id, membership, file,
                 metadata.title, metadata.type, metadata.source, metadata.description,
+                request.cookies.get(settings.session_cookie_name),
             )
         else:
             if declared_type not in ("image/jpeg", "image/png"):
@@ -233,6 +258,7 @@ async def create_module_resource(
                 create_image_resource, db, module, current_user, membership,
                 title=metadata.title, description=metadata.description,
                 requested_source=metadata.source, canonical_image=canonical,
+                category=metadata.type, raw_token=request.cookies.get(settings.session_cookie_name),
             )
         return _resource_response(doc, community_slug)
     finally:
@@ -253,6 +279,7 @@ def list_module_resources(
     module_slug: str,
     response: Response,
     kind: ResourceKind | None = None,
+    category: DocumentType | None = None,
     q: str | None = Query(None, max_length=100),
     source: DocumentSource | None = None,
     limit: int = Query(20, ge=1, le=50),
@@ -267,7 +294,7 @@ def list_module_resources(
     if query and len(query) > 100:
         raise HTTPException(status_code=422, detail="Search query must be at most 100 characters")
     documents, cursor = list_approved_resources(
-        db, module, kind=kind, title_query=query or None,
+        db, module, kind=kind, category=category, title_query=query or None,
         source=source, limit=limit, after=after,
     )
     response.headers.update(PRIVATE_HEADERS)
@@ -299,6 +326,51 @@ def pending_module_resources(
                for doc, module, vote in rows],
         next_cursor=cursor,
     )
+
+
+@router.get(
+    "/{community_slug}/resources/mine",
+    response_model=MyResourceFeedResponse,
+    summary="List the current member's typed resource submissions",
+)
+def my_module_resources(
+    community_slug: str,
+    response: Response,
+    limit: int = Query(20, ge=1, le=50),
+    after: UUID | None = None,
+    status_filter: DocumentStatus | None = Query(None, alias="status"),
+    current_user: User = Depends(get_current_user),
+    membership: Membership = Depends(get_current_active_membership),
+    db: Session = Depends(get_db),
+):
+    rows, cursor = list_my_resources(
+        db, membership.community_id, current_user.id,
+        status_filter=status_filter, limit=limit, after=after,
+    )
+    response.headers.update(PRIVATE_HEADERS)
+    return MyResourceFeedResponse(
+        items=[_my_resource_response(doc, module, community_slug, membership) for doc, module in rows],
+        next_cursor=cursor,
+    )
+
+
+@router.delete(
+    "/{community_slug}/resources/{resource_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Soft remove an unapproved resource under the current community policy",
+)
+async def delete_resource(
+    community_slug: str,
+    resource_id: UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if await request.body():
+        raise HTTPException(status_code=422, detail="Resource removal takes no body")
+    await run_in_threadpool(remove_resource, db, community_slug, resource_id,
+                            current_user.id, request.cookies.get(settings.session_cookie_name))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

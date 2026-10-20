@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { fetchApi, downloadApiFile, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { validPendingFeed, safeExternalUrl, type PendingResourceItem } from "@/lib/moduleResources";
+import { validPendingFeed, safeExternalUrl, resourceCategory, type PendingResourceItem } from "@/lib/moduleResources";
 import PendingResourcePreview from "@/components/modules/PendingResourcePreview";
 import ConfirmationDialog from "@/components/moderation/ConfirmationDialog";
 import AccessDeniedGuidance from "@/components/AccessDeniedGuidance";
@@ -36,17 +36,21 @@ export default function PendingDocumentsPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
 
-  useEffect(() => { scopeRef.current = scope; }, [scope]);
+  useEffect(() => {
+    scopeRef.current = scope;
+    return () => { scopeRef.current = null; };
+  }, [scope]);
 
   const accessLost = useCallback((status = 403) => {
     requestRef.current?.abort();
     requestNumber.current++;
     setItems([]); setCursor(null); setLoadedScope(null); setPreviewId(null);
-    setConfirmId(null); setNotice(null); setBlockedIds([]); setDenied(status);
+    setConfirmId(null); setDeleteId(null); setNotice(null); setBlockedIds([]); setDenied(status);
     void refresh();
   }, [refresh]);
   const previewAccessLost = useCallback((status: 401 | 403) => accessLost(status), [accessLost]);
@@ -85,7 +89,7 @@ export default function PendingDocumentsPage() {
     requestNumber.current++;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setItems([]); setCursor(null); setLoadedScope(null); setPreviewId(null);
-    setNotice(null); setConfirmId(null); setBlockedIds([]); setDenied(null);
+    setNotice(null); setConfirmId(null); setDeleteId(null); setBlockedIds([]); setDenied(null);
     if (scope) void loadQueue(false);
     return () => { requestRef.current?.abort(); };
     // A cursor change must not restart the queue.
@@ -136,6 +140,38 @@ export default function PendingDocumentsPage() {
     }
   };
 
+  const deleteResource = async (item: PendingResourceItem) => {
+    if (!scope || loadedScope !== scope || actionRef.current || blockedIds.includes(item.id) || !item.can_delete) return;
+    actionRef.current = item.id;
+    setBusyId(item.id); setConfirmError(null); setNotice(null);
+    try {
+      await fetchApi<void>(`${base}/${encodeURIComponent(item.id)}`,
+        { method: "DELETE", cache: "no-store" }, 204, "none");
+      if (scopeRef.current !== scope) return;
+      setDeleteId(null);
+      setItems(current => current.filter(row => row.id !== item.id));
+      setNotice({ kind: "success", message: `“${item.title}” was removed from community access.` });
+      if (!await loadQueue(false) && scopeRef.current === scope) {
+        setNotice({ kind: "warning", message: "Removal was confirmed, but the queue could not refresh. Refresh to see its current state." });
+      }
+    } catch (err) {
+      if (scopeRef.current !== scope) return;
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) { accessLost(err.status); return; }
+      setBlockedIds(current => [...current, item.id]);
+      if (err instanceof ApiError && err.status === 409) {
+        setDeleteId(null);
+        setNotice({ kind: "warning", message: "Approved resources cannot be deleted. The queue is refreshing." });
+        await loadQueue(false);
+      } else {
+        const message = "The removal outcome could not be confirmed. Refresh the queue before choosing another action; do not retry deletion automatically.";
+        setConfirmError(message); setNotice({ kind: "warning", message });
+      }
+    } finally {
+      actionRef.current = null;
+      if (scopeRef.current === scope) setBusyId(null);
+    }
+  };
+
   const download = async (id: string, title: string) => {
     try { await downloadApiFile(`/api/v1/documents/${encodeURIComponent(id)}/download`, title); }
     catch (err) {
@@ -146,6 +182,7 @@ export default function PendingDocumentsPage() {
   };
   const visible = scope && loadedScope === scope && !denied;
   const confirming = visible ? items.find(item => item.id === confirmId && item.can_approve) : null;
+  const deleting = visible ? items.find(item => item.id === deleteId && item.can_delete) : null;
 
   return <PageContainer width="wide">
     <Breadcrumbs items={[{ label: "Home", href: "/" }, { label: "Pending Resources" }]} />
@@ -168,6 +205,7 @@ export default function PendingDocumentsPage() {
       : visible && items.length === 0 ? <ContentEmpty title="No pending resources to review." description="New student submissions will appear here." />
       : visible && <div className="space-y-5">
         {items.map(item => {
+          const category = resourceCategory(item);
           const outbound = item.kind === "YOUTUBE" || item.kind === "LINK" ? safeExternalUrl(item) : null;
           const locked = !!busyId || blockedIds.includes(item.id) || loading || loadingMore;
           return <article key={item.id} className="ui-surface space-y-4">
@@ -175,7 +213,7 @@ export default function PendingDocumentsPage() {
               <h2 className="text-lg font-bold break-words">{item.title}</h2>{item.description && <p className="mt-1 break-words text-sm text-text-subtle">{item.description}</p>}</div>
             <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-text-subtle">
               <span>Module: <Link className="ui-link" href={`/communities/irm/modules/${encodeURIComponent(item.module_slug)}?from=pending`}>{item.module_name}</Link></span>
-              {item.kind === "PDF" && <span>Type: {documentTypeLabel(item.document_type ?? "")}</span>}
+              <span>Catégorie: {category ? documentTypeLabel(category) : "Non classé"}</span>
               <span>Submitted: <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleDateString()}</time></span>
               {item.is_uploader && <span>Your upload · voting unavailable</span>}{item.my_vote && <span>You voted: {item.my_vote}</span>}
             </div>
@@ -189,13 +227,15 @@ export default function PendingDocumentsPage() {
             </div>
             {previewId === item.id && (item.kind === "PDF" || item.kind === "IMAGE") &&
               <PendingResourcePreview key={`${scope}:${item.id}`} item={item} onAccessLost={previewAccessLost} />}
-            {(item.can_vote || item.can_approve) && <div className="flex flex-wrap gap-3 border-t border-border pt-4">
+            {(item.can_vote || item.can_approve || item.can_delete) && <div className="flex flex-wrap gap-3 border-t border-border pt-4">
               {item.can_vote && <><button type="button" disabled={locked} aria-busy={busyId === item.id} onClick={() => void runAction(item, "vote", "YES")}
                 className={buttonStyles("primary")}>YES — relevant</button>
                 <button type="button" disabled={locked} aria-busy={busyId === item.id} onClick={() => void runAction(item, "vote", "NO")}
                   className={buttonStyles("secondary")}>NO — not relevant</button></>}
               {item.can_approve && <button type="button" disabled={locked} onClick={() => { setConfirmError(null); setConfirmId(item.id); }}
                 className={buttonStyles("secondary")}>Approve resource</button>}
+              {item.can_delete && <button type="button" disabled={locked} onClick={() => { setConfirmError(null); setDeleteId(item.id); }}
+                className={buttonStyles("destructive")}>Delete resource</button>}
             </div>}
           </article>;
         })}
@@ -208,5 +248,10 @@ export default function PendingDocumentsPage() {
       pending={busyId === confirming.id} error={confirmError} onCancel={() => setConfirmId(null)}
       onConfirm={() => void runAction(confirming, "approve")}
       onCheck={async () => { if (await loadQueue(false)) setConfirmId(null); }} />}
+    {deleting && <ConfirmationDialog title="Delete resource" heading="Delete this resource?"
+      context={deleting.title} description="It will be removed from community access. Its stored record and file remain preserved."
+      pending={busyId === deleting.id} error={confirmError} onCancel={() => setDeleteId(null)}
+      onConfirm={() => void deleteResource(deleting)}
+      onCheck={async () => { if (await loadQueue(false)) setDeleteId(null); }} />}
   </PageContainer>;
 }

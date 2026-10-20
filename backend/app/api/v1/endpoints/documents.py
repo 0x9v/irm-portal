@@ -1,8 +1,9 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, status, UploadFile, File, Form, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, status, UploadFile, File, Form, HTTPException, Query, Response, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_current_active_membership
+from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
 from app.models.membership import Membership
@@ -25,6 +26,13 @@ from app.services.module import get_community_module
 from app.services.document import upload_document
 
 router = APIRouter()
+
+
+async def reject_upload_authority_fields(request: Request) -> None:
+    """Legacy multipart clients cannot provide creation authority or status."""
+    form = await request.form()
+    if {"status", "role", "approved_by_id", "uploader_id", "permissions"}.intersection(form.keys()):
+        raise HTTPException(status_code=422, detail="Invalid document upload fields")
 
 
 @router.post(
@@ -211,6 +219,8 @@ def delete_saved_document(
 def upload_module_document(
     community_slug: str,
     module_slug: str,
+    request: Request,
+    _authority_fields: None = Depends(reject_upload_authority_fields),
     file: UploadFile = File(...),
     title: str = Form(...),
     type: DocumentType = Form(...),
@@ -238,7 +248,8 @@ def upload_module_document(
         file=file,
         title=title,
         doc_type=type,
-        requested_source=source
+        requested_source=source,
+        raw_token=request.cookies.get(settings.session_cookie_name),
     )
 
 

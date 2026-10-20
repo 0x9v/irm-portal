@@ -10,6 +10,7 @@ const documentData = {
 };
 
 async function mockAuth(page: Page) {
+  await page.route('**/api/**', route => route.abort());
   await page.route(`${api}/auth/me`, route => route.fulfill({ status: 200, json: {
     id: 'member-id', username: 'student', email: 'student@example.test', first_name: 'Account', family_name: 'Name',
   } }));
@@ -19,7 +20,7 @@ async function mockAuth(page: Page) {
   await page.route(`${api}/communities/irm/modules/${slug}`, route => route.fulfill({ status: 200, json: moduleData }));
   await page.route(`${api}/communities/irm/modules/${slug}/resources**`, route => route.fulfill({ status: 200, json: { items: [{
     id: documentData.id, module_id: documentData.module_id, kind: 'PDF', title: documentData.title,
-    description: null, document_type: documentData.type, source: documentData.source,
+    description: null, category: documentData.type, document_type: documentData.type, source: documentData.source,
     status: documentData.status, created_at: documentData.created_at, updated_at: documentData.updated_at,
   }], next_cursor: null } }));
   await page.route(`${api}/communities/irm/modules/${slug}/documents**`, async route => {
@@ -37,7 +38,7 @@ test('direct approved-document visit has a safe module return and invalid contex
   const back = page.getByRole('link', { name: 'Back to module documents' });
   await expect(back).toHaveAttribute('href', `/communities/irm/modules/${slug}?q=waves&type=TD&source=STUDENT&from=module`);
   await expect(page.getByRole('link', { name: 'Introduction to Physics' })).toHaveAttribute('href', `/communities/irm/modules/${slug}?q=waves&type=TD&source=STUDENT&from=module`);
-  await expect(page.getByText('Course', { exact: true })).toBeVisible();
+  await expect(page.getByText('Cours', { exact: true })).toBeVisible();
   await expect(page.getByText('Official', { exact: true })).toBeVisible();
 });
 
@@ -45,21 +46,22 @@ test('module filters survive opening an approved document and returning', async 
   await mockAuth(page);
   await page.goto(`/communities/irm/modules/${slug}?q=waves&type=COURSE&source=OFFICIAL`);
   await expect(page.getByRole('searchbox', { name: 'Search resources' })).toHaveValue('waves');
-  await expect(page.getByRole('option', { name: 'Course' })).toBeAttached();
+  await expect(page.getByRole('option', { name: 'Cours' })).toBeAttached();
   const read = page.getByRole('link', { name: 'Read Document' });
-  await expect(read).toHaveAttribute('href', new RegExp(`from=module.*q=waves.*type=COURSE.*source=OFFICIAL`));
+  await expect(read).toHaveAttribute('href', new RegExp(`from=module.*q=waves.*category=COURSE.*kind=PDF.*source=OFFICIAL`));
   await read.click();
   await expect(page.getByRole('heading', { name: documentData.title })).toBeVisible();
   await page.getByRole('link', { name: 'Back to module documents' }).click();
-  await expect(page).toHaveURL(new RegExp(`\\?q=waves&type=COURSE&source=OFFICIAL&from=module$`));
+  await expect(page).toHaveURL(new RegExp(`\\?q=waves&category=COURSE&kind=PDF&source=OFFICIAL&from=module$`));
   await expect(page.getByRole('searchbox', { name: 'Search resources' })).toHaveValue('waves');
 });
 
 test('My Submissions and pending contexts return to their own authorized lists', async ({ page }) => {
   await mockAuth(page);
-  await page.route(`${api}/communities/irm/documents/mine**`, route => route.fulfill({ status: 200, json: {
+  await page.route(`${api}/communities/irm/resources/mine**`, route => route.fulfill({ status: 200, json: {
     items: [{ id: 'approved-doc', module_id: moduleData.id, module_slug: slug, module_name: moduleData.name,
-      title: 'Approved upload', type: 'COURSE', source: 'OFFICIAL', status: 'APPROVED',
+      title: 'Approved upload', kind: 'PDF', category: 'COURSE', document_type: 'COURSE',
+      can_delete: false, description: null, source: 'OFFICIAL', status: 'APPROVED',
       created_at: documentData.created_at, updated_at: documentData.updated_at }], next_cursor: null,
   } }));
   await page.goto('/communities/irm/documents/mine');
@@ -72,7 +74,7 @@ test('My Submissions and pending contexts return to their own authorized lists',
     id: 'pending-doc', kind: 'PDF', title: 'Pending upload', document_type: 'TD', description: null,
     source: 'STUDENT', status: 'PENDING', created_at: documentData.created_at, updated_at: documentData.updated_at,
     module_id: moduleData.id, module_slug: slug, module_name: moduleData.name,
-    is_uploader: false, my_vote: null, can_vote: true, can_approve: false, full_resource_access: false,
+    is_uploader: false, my_vote: null, can_vote: true, can_approve: false, can_delete: false, full_resource_access: false,
     preview: { url: '/api/v1/communities/irm/resources/pending-doc/preview', media_type: 'image/png' },
   }], next_cursor: null } }));
   await page.goto('/communities/irm/documents/pending');

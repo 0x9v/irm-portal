@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 BACKEND = Path(__file__).resolve().parents[1]
-HEAD = "b7c3e9a4d182"
+HEAD = "e3a91c6d2f40"
 DATABASE = "irm_integration_test"
 ROLE = "irm_test"
 SCHEMA_PATTERN = re.compile(r"irm_acceptance_[0-9a-f]{32}\Z")
@@ -204,6 +204,7 @@ def verify_layout(engine, lease):
         required.add(("discussion_messages", "custom_sticker_id"))
         required |= {("community_post_replies", column) for column in ["image_storage_key", "client_request_id", "request_fingerprint"]}
         required |= {("documents", column) for column in ["description", "resource_kind", "image_storage_key", "youtube_video_id", "external_url"]}
+        required |= {("documents", column) for column in ["removed_at", "removed_by_id"]}
         required |= {(table, column) for table in ["announcements", "announcement_replies", "community_posts", "community_post_replies", "discussion_messages"] for column in ["removed_at", "removed_by_id"]}
         if not required.issubset(set(columns)):
             raise SafetyError("Required acceptance columns missing")

@@ -5,13 +5,15 @@ export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number];
 export type DocumentSourceValue = (typeof DOCUMENT_SOURCES)[number];
 
 const typeLabels: Record<DocumentTypeValue, string> = {
-  COURSE: "Course",
-  TD: "Tutorial",
-  TP: "Practical work",
-  EXAM: "Exam",
+  COURSE: "Cours",
+  TD: "TD",
+  TP: "TP",
+  EXAM: "Examen",
   SOLUTION: "Solution",
-  OTHER: "Other",
+  OTHER: "Autre",
 };
+
+export const DOCUMENT_CATEGORY_OPTIONS = DOCUMENT_TYPES.map(value => ({ value, label: typeLabels[value] }));
 
 const sourceLabels: Record<DocumentSourceValue, string> = {
   OFFICIAL: "Official",
@@ -49,7 +51,7 @@ export function isDocumentReturnContext(value: string | null | undefined): value
   return value === "module" || value === "mine" || value === "pending";
 }
 
-export type ModuleDocumentFilters = { q: string; type: string; source: string };
+export type ModuleDocumentFilters = { q: string; type: string; source: string; category?: string };
 
 export function readModuleDocumentFilters(search: string): ModuleDocumentFilters {
   const params = new URLSearchParams(search);
@@ -57,6 +59,7 @@ export function readModuleDocumentFilters(search: string): ModuleDocumentFilters
   return {
     q: q.length <= 100 ? q : "",
     type: isDocumentType(params.get("type")) ? params.get("type")! : "",
+    category: isDocumentType(params.get("category")) ? params.get("category")! : "",
     source: isDocumentSource(params.get("source")) ? params.get("source")! : "",
   };
 }
@@ -70,8 +73,9 @@ export function moduleDocumentHref(
   const params = new URLSearchParams();
   const q = filters.q.trim();
   if (q && q.length <= 100) params.set("q", q);
+  if (isDocumentType(filters.category)) params.set("category", filters.category);
   if (kind === "PDF") params.set("kind", "PDF");
-  if (isDocumentType(filters.type)) params.set("type", filters.type);
+  if (!isDocumentType(filters.category) && isDocumentType(filters.type)) params.set("type", filters.type);
   if (isDocumentSource(filters.source)) params.set("source", filters.source);
   if (from) params.set("from", from);
   const suffix = params.size ? `?${params.toString()}` : "";

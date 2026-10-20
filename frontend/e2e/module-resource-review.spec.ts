@@ -5,13 +5,13 @@ const id = (n: number) => `a0000000-0000-4000-8000-00000000000${n}`;
 const route = (n: number) => `/api/v1/communities/irm/resources/${id(n)}/preview`;
 const common = { module_id: 'd0000000-0000-4000-8000-000000000001', module_slug: 'intro-physics', module_name: 'Physics',
   description: null, source: 'STUDENT', status: 'PENDING', created_at: '2026-10-14T12:00:00Z', updated_at: '2026-10-14T12:00:00Z',
-  is_uploader: false, my_vote: null, can_vote: true, can_approve: false, full_resource_access: false };
-const pdf = { ...common, id: id(1), kind: 'PDF', title: 'PDF notes', document_type: 'COURSE', preview: { url: route(1), media_type: 'image/png' } };
-const legacy = { ...common, id: id(2), kind: 'IMAGE', title: 'Legacy image', preview_url: route(2), preview: { url: route(2), media_type: 'image/png' }, full_resource_access: true };
-const image = { ...common, id: id(3), kind: 'IMAGE', title: 'Canonical image', preview_url: route(3), preview: { url: route(3), media_type: 'image/webp' }, full_resource_access: true };
-const youtube = { ...common, id: id(4), kind: 'YOUTUBE', title: 'Video', video_id: 'dQw4w9WgXcQ', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  is_uploader: false, my_vote: null, can_vote: true, can_approve: false, can_delete: false, full_resource_access: false };
+const pdf = { ...common, id: id(1), kind: 'PDF', title: 'PDF notes', category: 'COURSE', document_type: 'COURSE', preview: { url: route(1), media_type: 'image/png' } };
+const legacy = { ...common, id: id(2), kind: 'IMAGE', title: 'Legacy image', category: 'OTHER', preview_url: route(2), preview: { url: route(2), media_type: 'image/png' }, full_resource_access: true };
+const image = { ...common, id: id(3), kind: 'IMAGE', title: 'Canonical image', category: 'TD', preview_url: route(3), preview: { url: route(3), media_type: 'image/webp' }, full_resource_access: true };
+const youtube = { ...common, id: id(4), kind: 'YOUTUBE', title: 'Video', category: null, video_id: 'dQw4w9WgXcQ', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   preview: { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }, full_resource_access: true };
-const link = { ...common, id: id(5), kind: 'LINK', title: 'Guide', url: 'https://example.org/guide',
+const link = { ...common, id: id(5), kind: 'LINK', title: 'Guide', category: 'TP', url: 'https://example.org/guide',
   preview: { url: 'https://example.org/guide' }, full_resource_access: true };
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==', 'base64');
 const webp = Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA', 'base64');
@@ -29,6 +29,8 @@ async function setup(page: Page, rows: unknown[] = [pdf]) {
 test('four kinds, PNG/WebP protected previews and safe outbound destinations', async ({ page }) => {
   await setup(page, [pdf, legacy, image, youtube, link]);
   for (const row of [pdf, legacy, image, youtube, link]) await expect(page.getByRole('heading', { name: row.title })).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: image.title })).toContainText('Catégorie: TD');
+  await expect(page.getByRole('article').filter({ hasText: youtube.title })).toContainText('Catégorie: Non classé');
   await page.route(`**${route(1)}`, route => route.fulfill({ body: png, contentType: 'image/png' }));
   await page.route(`**${route(2)}`, route => route.fulfill({ body: png, contentType: 'image/png' }));
   await page.route(`**${route(3)}`, route => route.fulfill({ body: webp, contentType: 'image/webp' }));
@@ -41,6 +43,43 @@ test('four kinds, PNG/WebP protected previews and safe outbound destinations', a
   await expect(page.getByRole('link', { name: 'Open on YouTube' })).toHaveAttribute('rel', 'noopener noreferrer');
   await expect(page.getByRole('link', { name: 'Open example.org' })).toHaveAttribute('href', 'https://example.org/guide');
   await expect(page.getByRole('button', { name: 'Download Original' })).toHaveCount(0);
+});
+
+test('pending deletion is offered only by server capability and confirms the resource', async ({ page }) => {
+  let removed = false;
+  await setup(page, [{ ...pdf, is_uploader: true, can_vote: false, can_delete: true }, link]);
+  await expect(page.getByRole('article').filter({ hasText: link.title }).getByRole('button', { name: 'Delete resource' })).toHaveCount(0);
+  const own = page.getByRole('article').filter({ hasText: pdf.title });
+  await own.getByRole('button', { name: 'Delete resource' }).click();
+  await expect(page.getByRole('dialog')).toContainText(pdf.title);
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.route(`${base}/pending**`, route => route.fulfill({ json: { items: removed ? [link] : [{ ...pdf, is_uploader: true, can_vote: false, can_delete: true }, link], next_cursor: null } }));
+  let calls = 0;
+  await page.route(`${base}/${id(1)}`, route => { calls++; removed = true; return route.fulfill({ status: 204 }); });
+  await own.getByRole('button', { name: 'Delete resource' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete resource' }).click();
+  await expect(own).toHaveCount(0);
+  expect(calls).toBe(1);
+});
+
+test('delete control and confirmation fit light and dark review layouts', async ({ page }) => {
+  await setup(page, [{ ...image, can_delete: true, can_vote: false, is_uploader: true }]);
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 780 });
+    for (const theme of ['light', 'dark']) {
+      await page.locator('html').evaluate((node, value) => node.setAttribute('data-theme', value), theme);
+      const button = page.getByRole('button', { name: 'Delete resource' });
+      await expect(button).toBeVisible();
+      await button.focus();
+      await expect(button).toBeFocused();
+      await button.click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      expect(await page.locator('body').evaluate(node => node.scrollWidth)).toBeLessThanOrEqual(width);
+      await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+    }
+  }
 });
 
 test('server flags gate controls; vote uses exact body and single flight, preserves PDF YES download', async ({ page }) => {

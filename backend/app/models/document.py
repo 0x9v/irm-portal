@@ -6,6 +6,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Uuid, CheckC
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.content_removal import ContentRemoval
 
 
 class DocumentType(str, enum.Enum):
@@ -35,7 +36,7 @@ class ResourceKind(str, enum.Enum):
     LINK = "LINK"
 
 
-class Document(Base):
+class Document(ContentRemoval, Base):
     __tablename__ = "documents"
     __table_args__ = (
         UniqueConstraint("image_storage_key", name="uq_document_image_storage_key"),
@@ -49,9 +50,9 @@ class Document(Base):
         ),
         CheckConstraint(
             "(resource_kind = 'PDF' AND type IS NOT NULL AND storage_path IS NOT NULL AND image_storage_key IS NULL AND youtube_video_id IS NULL AND external_url IS NULL) OR "
-            "(resource_kind = 'IMAGE' AND (storage_path IS NOT NULL OR image_storage_key IS NOT NULL) AND youtube_video_id IS NULL AND external_url IS NULL AND (image_storage_key IS NULL OR type IS NULL)) OR "
-            "(resource_kind = 'YOUTUBE' AND type IS NULL AND storage_path IS NULL AND preview_path IS NULL AND image_storage_key IS NULL AND youtube_video_id IS NOT NULL AND external_url IS NULL) OR "
-            "(resource_kind = 'LINK' AND type IS NULL AND storage_path IS NULL AND preview_path IS NULL AND image_storage_key IS NULL AND youtube_video_id IS NULL AND external_url IS NOT NULL)",
+            "(resource_kind = 'IMAGE' AND (storage_path IS NOT NULL OR image_storage_key IS NOT NULL) AND youtube_video_id IS NULL AND external_url IS NULL) OR "
+            "(resource_kind = 'YOUTUBE' AND storage_path IS NULL AND preview_path IS NULL AND image_storage_key IS NULL AND length(youtube_video_id) = 11 AND external_url IS NULL) OR "
+            "(resource_kind = 'LINK' AND storage_path IS NULL AND preview_path IS NULL AND image_storage_key IS NULL AND youtube_video_id IS NULL AND external_url IS NOT NULL)",
             name="ck_document_resource_payload",
         ),
         CheckConstraint(
@@ -109,7 +110,7 @@ class Document(Base):
     )
 
     module: Mapped["Module"] = relationship(back_populates="documents")
-    uploader: Mapped["User"] = relationship(back_populates="documents")
+    uploader: Mapped["User"] = relationship(back_populates="documents", foreign_keys=[uploader_id])
     votes: Mapped[list["DocumentVote"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )

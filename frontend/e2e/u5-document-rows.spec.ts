@@ -85,10 +85,10 @@ test('personal rows retain saved, recent and submission-specific metadata and ga
     return route.fulfill({ status: 200, json: { saved: !removed } });
   });
   await page.route(`${api}/communities/irm/documents/recent?*`, route => route.fulfill({ status: 200, json: { items: [{ ...shared, last_page: 7, last_opened_at: '2026-04-02T10:30:00Z' }], next_cursor: null } }));
-  await page.route(`${api}/communities/irm/documents/mine?*`, route => route.fulfill({ status: 200, json: { items: [
-    { ...shared, status: 'APPROVED', created_at: approved.created_at, updated_at: approved.updated_at },
-    { ...shared, id: 'pending-1', title: 'Pending handout', status: 'PENDING', created_at: approved.created_at, updated_at: approved.updated_at },
-    { ...shared, id: 'rejected-1', title: 'Rejected handout', status: 'REJECTED', created_at: approved.created_at, updated_at: approved.updated_at },
+  await page.route(`${api}/communities/irm/resources/mine?*`, route => route.fulfill({ status: 200, json: { items: [
+    { ...shared, kind: 'PDF', category: 'COURSE', document_type: 'COURSE', description: null, can_delete: false, status: 'APPROVED', created_at: approved.created_at, updated_at: approved.updated_at },
+    { ...shared, kind: 'PDF', category: 'COURSE', document_type: 'COURSE', description: null, can_delete: true, id: 'pending-1', title: 'Pending handout', status: 'PENDING', created_at: approved.created_at, updated_at: approved.updated_at },
+    { ...shared, kind: 'PDF', category: 'COURSE', document_type: 'COURSE', description: null, can_delete: true, id: 'rejected-1', title: 'Rejected handout', status: 'REJECTED', created_at: approved.created_at, updated_at: approved.updated_at },
   ], next_cursor: null } }));
 
   await page.goto('/communities/irm/documents/saved');

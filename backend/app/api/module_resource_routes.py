@@ -26,10 +26,28 @@ class ModuleResourceMutationRoute(APIRoute):
 
         async def guarded(request: Request):
             try:
-                if request.method == "POST":
+                if request.method in ("POST", "DELETE"):
                     origins = request.headers.getlist("origin")
                     if len(origins) != 1 or not is_trusted_account_origin(origins[0]):
                         return _resource_error("Untrusted request origin", status.HTTP_403_FORBIDDEN)
+                if request.method == "DELETE":
+                    lengths = request.headers.getlist("content-length")
+                    if len(lengths) > 1:
+                        return _resource_error("Invalid Content-Length", 400)
+                    if lengths:
+                        try:
+                            declared = int(lengths[0])
+                        except ValueError:
+                            return _resource_error("Invalid Content-Length", 400)
+                        if declared < 0:
+                            return _resource_error("Invalid Content-Length", 400)
+                        if declared:
+                            return _resource_error("Resource removal takes no body", 422)
+                    async for chunk in request.stream():
+                        if chunk:
+                            return _resource_error("Resource removal takes no body", 422)
+                    request._body = b""
+                if request.method == "POST":
                     content_types = request.headers.getlist("content-type")
                     if len(content_types) != 1:
                         return _resource_error("Invalid resource request media type", 415)

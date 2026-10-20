@@ -16,6 +16,7 @@ from app.models.user import User
 
 PREVIOUS_HEAD = "e8a4f6b1c932"
 NEW_HEAD = "b7c3e9a4d182"
+CATEGORY_HEAD = "c8e4f1a2b603"
 CREATED = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
 
 
@@ -162,6 +163,78 @@ def test_typed_resource_migration_backfills_legacy_formats_and_preserves_relatio
             image_kind = connection.execute(text("SELECT resource_kind FROM documents WHERE id=:id"),
                                             {"id": document_ids["png"]}).scalar_one()
             assert image_kind == "IMAGE"
+
+
+def test_category_constraint_migration_preserves_documents_and_relationships():
+    with disposable_database(upgrade=False) as resource:
+        assert resource.server_identity["database"] == "irm_integration_test"
+        assert resource.server_identity["role"] == "irm_test"
+        migrate(resource.engine, resource.lease, NEW_HEAD)
+        with Session(resource.engine) as session:
+            community = Community(name="D1 category", slug="d1-category")
+            uploader = User(username="d1_uploader", email="d1-uploader@example.invalid",
+                            password_hash="opaque", first_name="D1", family_name="Uploader")
+            voter = User(username="d1_voter", email="d1-voter@example.invalid",
+                         password_hash="opaque", first_name="D1", family_name="Voter")
+            session.add_all([community, uploader, voter])
+            session.flush()
+            module = Module(community_id=community.id, name="D1 module", slug="d1-module")
+            session.add(module)
+            session.flush()
+            community_id, module_id, uploader_id, voter_id = community.id, module.id, uploader.id, voter.id
+            session.commit()
+
+        pdf_id, legacy_image_id, image_id, link_id = (uuid4() for _ in range(4))
+        storage_key = f"module-resources/{community_id}/{module_id}/{image_id}/image.webp"
+        with resource.engine.begin() as connection:
+            documents = Table("documents", MetaData(), autoload_with=connection)
+            common = dict(module_id=module_id, uploader_id=uploader_id, source="STUDENT",
+                          status="PENDING", vote_threshold_snapshot=4,
+                          created_at=CREATED, updated_at=CREATED)
+            for values in [
+                dict(id=pdf_id, title="Legacy PDF", type="COURSE", resource_kind="PDF",
+                     storage_path="legacy/course.pdf", **common),
+                dict(id=legacy_image_id, title="Legacy image", type="TP", resource_kind="IMAGE",
+                     storage_path="legacy/diagram.png", **common),
+                dict(id=image_id, title="Canonical image", type=None, resource_kind="IMAGE",
+                     image_storage_key=storage_key, **common),
+                dict(id=link_id, title="Unclassified link", type=None, resource_kind="LINK",
+                     external_url="https://example.com/notes", **common),
+            ]:
+                connection.execute(documents.insert().values(**values))
+            connection.execute(Table("document_votes", MetaData(), autoload_with=connection).insert().values(
+                id=uuid4(), document_id=pdf_id, voter_id=voter_id, vote="YES",
+                created_at=CREATED, updated_at=CREATED,
+            ))
+            connection.execute(Table("saved_documents", MetaData(), autoload_with=connection).insert().values(
+                id=uuid4(), user_id=voter_id, document_id=pdf_id, created_at=CREATED,
+            ))
+            connection.execute(Table("document_reading_records", MetaData(), autoload_with=connection).insert().values(
+                id=uuid4(), user_id=voter_id, document_id=pdf_id,
+                last_page=3, last_opened_at=CREATED,
+            ))
+
+        migrate(resource.engine, resource.lease, CATEGORY_HEAD)
+        with resource.engine.begin() as connection:
+            documents = Table("documents", MetaData(), autoload_with=connection)
+            rows = {row.id: row for row in connection.execute(
+                select(documents).where(documents.c.id.in_([pdf_id, legacy_image_id, image_id, link_id]))
+            )}
+            assert rows[pdf_id].type == "COURSE" and rows[pdf_id].storage_path == "legacy/course.pdf"
+            assert rows[legacy_image_id].type == "TP" and rows[legacy_image_id].storage_path == "legacy/diagram.png"
+            assert rows[image_id].type is None and rows[image_id].image_storage_key == storage_key
+            assert rows[link_id].type is None and rows[link_id].external_url == "https://example.com/notes"
+            for table, document_id in (("document_votes", pdf_id), ("saved_documents", pdf_id),
+                                       ("document_reading_records", pdf_id)):
+                assert connection.execute(text(f"SELECT count(*) FROM {table} WHERE document_id=:id"),
+                                          {"id": document_id}).scalar_one() == 1
+            connection.execute(text("UPDATE documents SET type='TD' WHERE id=:id"), {"id": image_id})
+            connection.execute(text("UPDATE documents SET type='TD' WHERE id=:id"), {"id": link_id})
+        with pytest.raises(RuntimeError, match="categorized typed resources"):
+            migrate(resource.engine, resource.lease, NEW_HEAD, downgrade=True)
+        with resource.engine.connect() as connection:
+            assert connection.execute(text("SELECT type FROM documents WHERE id=:id"),
+                                      {"id": link_id}).scalar_one() == "TD"
 
 
 def test_unknown_legacy_storage_suffix_aborts_without_guessing_a_kind():

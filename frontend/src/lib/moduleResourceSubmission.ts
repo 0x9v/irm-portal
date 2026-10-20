@@ -1,3 +1,5 @@
+import { isDocumentType, type DocumentTypeValue } from "@/lib/documentPresentation";
+
 export type ResourceKind = "PDF" | "IMAGE" | "YOUTUBE" | "LINK";
 export type ResourceSource = "STUDENT" | "OFFICIAL";
 
@@ -9,7 +11,7 @@ export interface ResourceDraft {
   title: string;
   description: string;
   source: ResourceSource;
-  documentType: string;
+  category: DocumentTypeValue | "";
   file: File | null;
   url: string;
 }
@@ -21,6 +23,7 @@ export interface ResourceCreated {
   title: string;
   source: ResourceSource;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  category: DocumentTypeValue;
   document_type?: string;
   preview_url?: string;
   video_id?: string;
@@ -59,6 +62,7 @@ export function urlError(kind: "YOUTUBE" | "LINK", value: string): string | null
 }
 
 export function draftError(draft: ResourceDraft): string | null {
+  if (!isDocumentType(draft.category)) return "Choisir une catégorie.";
   if (!draft.title.trim() || draft.title.trim().length > 255) return "Enter a title of at most 255 characters.";
   if (draft.description.trim().length > 2000) return "Description must be 2,000 characters or shorter.";
   if (draft.kind === "PDF" || draft.kind === "IMAGE") {
@@ -76,20 +80,22 @@ export function submissionBody(draft: ResourceDraft): FormData | string {
     body.append("title", common.title);
     if (common.description) body.append("description", common.description);
     body.append("source", common.source);
-    if (draft.kind === "PDF") body.append("type", draft.documentType);
+    body.append("type", draft.category);
     if (draft.file) body.append("file", draft.file);
     return body;
   }
-  return JSON.stringify({ ...common, url: draft.url.trim() });
+  return JSON.stringify({ ...common, url: draft.url.trim(), type: draft.category });
 }
 
-export function validCreation(value: unknown, draft: ResourceDraft, moduleId: string): value is ResourceCreated {
+export function validCreation(value: unknown, draft: ResourceDraft, moduleId: string,
+  membershipRole: "MEMBER" | "MODERATOR" | "DELEGATE"): value is ResourceCreated {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<ResourceCreated>;
   if (typeof item.id !== "string" || !item.id || item.module_id !== moduleId || item.kind !== draft.kind ||
       item.title !== draft.title.trim() || item.source !== draft.source ||
-      item.status !== (draft.source === "STUDENT" ? "PENDING" : "APPROVED")) return false;
-  if (draft.kind === "PDF") return item.document_type === draft.documentType;
+      item.status !== (draft.source === "OFFICIAL" || membershipRole === "DELEGATE" ? "APPROVED" : "PENDING") ||
+      !isDocumentType(draft.category) || item.category !== draft.category) return false;
+  if (draft.kind === "PDF") return item.document_type === draft.category;
   if (draft.kind === "IMAGE") return typeof item.preview_url === "string" && item.preview_url.startsWith("/api/v1/communities/");
   if (draft.kind === "YOUTUBE") return typeof item.video_id === "string" && /^[A-Za-z0-9_-]{11}$/.test(item.video_id) && typeof item.url === "string";
   return typeof item.url === "string";

@@ -42,7 +42,7 @@ async function fixture(page: Page, persona: Persona) {
     if (path.endsWith('/documents/identity-document/saved')) { if (method === 'PUT') state.saved = true; if (method === 'DELETE') state.saved = false; return json({ saved: state.saved }); }
     if (path.endsWith('/documents/saved')) return json({ items: [{ ...document, saved_at: course.created_at }], next_cursor: null });
     if (path.endsWith('/documents/recent')) return json({ items: [{ ...document, last_opened_at: course.created_at, last_page: 2 }], next_cursor: null });
-    if (path.endsWith('/documents/mine')) return json({ items: [], next_cursor: null });
+    if (path.endsWith('/resources/mine')) return json({ items: [], next_cursor: null });
     if (path.endsWith('/reading/open')) return json({ last_page: 2, last_opened_at: course.created_at });
     if (path.endsWith('/reading/position')) return json({ last_page: (body as { last_page: number }).last_page });
     if (path.endsWith('/documents/pending')) return json(state.voted ? [] : [{ ...document, id: 'pending-document', status: 'PENDING', source: 'STUDENT', is_uploader: false, can_vote: true, my_vote: null, full_document_access: false }]);

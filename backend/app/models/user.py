@@ -49,7 +49,7 @@ class User(Base):
     )
 
     documents: Mapped[list["Document"]] = relationship(
-        back_populates="uploader", cascade="all, delete-orphan"
+        back_populates="uploader", cascade="all, delete-orphan", foreign_keys="Document.uploader_id"
     )
     announcements: Mapped[list["Announcement"]] = relationship(
         foreign_keys="Announcement.author_id", back_populates="author", cascade="all, delete-orphan"

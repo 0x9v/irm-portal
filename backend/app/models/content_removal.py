@@ -1,4 +1,4 @@
-"""Two-field soft removal shared only by the five community content models."""
+"""Two-field soft removal metadata shared by community content and resources."""
 
 from datetime import datetime
 from uuid import UUID

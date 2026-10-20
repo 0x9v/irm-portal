@@ -83,7 +83,7 @@ def download_global_document(
         )
 
     doc = db.query(Document).filter(Document.id == doc_uuid).first()
-    if not doc:
+    if not doc or doc.removed_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found."
@@ -99,6 +99,9 @@ def download_global_document(
 
     # Safe file resolution and MIME generation
     file_path, mime_type, safe_filename = get_document_download_info(doc)
+    if db.query(Document.id).filter(Document.id == doc.id,
+                                    Document.removed_at.is_(None)).first() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
 
     return FileResponse(
         path=file_path,
@@ -133,7 +136,7 @@ def view_approved_document(
         )
 
     doc = db.query(Document).filter(Document.id == doc_uuid).first()
-    if not doc:
+    if not doc or doc.removed_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found."

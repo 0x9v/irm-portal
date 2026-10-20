@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.models.document import Document, DocumentSource, DocumentStatus, DocumentType, ResourceKind
 from app.models.membership import Membership, MembershipRole, MembershipStatus
 from app.models.module import Module
+from app.models.user import User
+from app.core.sessions import validate_session
 from app.core.storage.local import LocalFileSystemStorage
 
 storage = LocalFileSystemStorage()
@@ -14,6 +16,29 @@ ALLOWED_MIME_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
 }
+
+
+def lock_creation_membership(db: Session, module: Module, uploader_id: uuid.UUID,
+                             raw_token: str | None) -> Membership:
+    """Recheck creation authority under the mutation lock order until commit."""
+    if db.query(User.id).filter(User.id == uploader_id).with_for_update().first() is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    session = validate_session(db, raw_token, refresh=True, lock=True) if raw_token else None
+    if session is None or session.user_id != uploader_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    membership = (db.query(Membership)
+                  .filter(Membership.user_id == uploader_id,
+                          Membership.community_id == module.community_id)
+                  .with_for_update().populate_existing().first())
+    if membership is None or membership.status != MembershipStatus.ACTIVE:
+        raise HTTPException(status_code=403, detail="Active membership required")
+    return membership
+
+
+def creation_status(source: DocumentSource, membership: Membership) -> DocumentStatus:
+    return (DocumentStatus.APPROVED
+            if source == DocumentSource.OFFICIAL or membership.role == MembershipRole.DELEGATE
+            else DocumentStatus.PENDING)
 
 
 def resolve_document_source(
@@ -57,13 +82,11 @@ def upload_document(
     doc_type: DocumentType,
     requested_source: DocumentSource | None = None,
     description: str | None = None,
+    raw_token: str | None = None,
 ) -> Document:
+    membership = lock_creation_membership(db, module, uploader_id, raw_token)
     final_source = resolve_document_source(db, membership, requested_source)
-    # 1b. Determine status purely from the validated source
-    if final_source == DocumentSource.OFFICIAL:
-        final_status = DocumentStatus.APPROVED
-    else:
-        final_status = DocumentStatus.PENDING
+    final_status = creation_status(final_source, membership)
 
     # 2. Validate file type
     if file.content_type not in ALLOWED_MIME_TYPES:
@@ -209,6 +232,7 @@ def list_approved_documents(
     query = db.query(Document).filter(
         Document.module_id == module_id,
         Document.status == DocumentStatus.APPROVED,
+        Document.removed_at.is_(None),
         Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
         Document.storage_path.is_not(None),
     )
@@ -239,6 +263,7 @@ def list_my_document_submissions(
         .filter(
             Module.community_id == community_id,
             Document.uploader_id == uploader_id,
+            Document.removed_at.is_(None),
             Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
             Document.storage_path.is_not(None),
         )
@@ -254,6 +279,7 @@ def list_my_document_submissions(
                 Document.id == after,
                 Module.community_id == community_id,
                 Document.uploader_id == uploader_id,
+                Document.removed_at.is_(None),
                 Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
                 Document.storage_path.is_not(None),
             )
@@ -295,13 +321,14 @@ def get_approved_document(db: Session, module_id: uuid.UUID, document_id: str) -
             Document.id == doc_uuid,
             Document.module_id == module_id,
             Document.status == DocumentStatus.APPROVED,
+            Document.removed_at.is_(None),
             Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
             Document.storage_path.is_not(None),
         )
         .first()
     )
 
-    if not doc:
+    if not doc or doc.removed_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found."
@@ -367,7 +394,7 @@ def get_document_preview_bytes(db: Session, document_id: str) -> bytes:
     )
 
     # 1. Document must exist
-    if not doc:
+    if not doc or doc.removed_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found."
@@ -390,7 +417,12 @@ def get_document_preview_bytes(db: Session, document_id: str) -> bytes:
     # 4. Read the bytes via StorageProvider
     from app.core.storage.exceptions import ObjectNotFoundError, StorageError
     try:
-        return storage.read(doc.preview_path)
+        payload = storage.read(doc.preview_path)
+        if db.query(Document.id).filter(Document.id == doc.id,
+                                        Document.removed_at.is_(None),
+                                        Document.status != DocumentStatus.REJECTED).first() is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        return payload
     except ObjectNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -454,6 +486,7 @@ def list_pending_student_documents(
             Module.community_id == community.id,
             Document.source == DocumentSource.STUDENT,
             Document.status == DocumentStatus.PENDING,
+            Document.removed_at.is_(None),
             Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
             Document.storage_path.is_not(None),
         )

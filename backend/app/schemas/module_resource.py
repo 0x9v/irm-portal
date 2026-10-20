@@ -20,6 +20,7 @@ class ResourceCreateUrlBase(BaseModel):
     title: ResourceTitle
     description: ResourceDescription | None = None
     source: DocumentSource | None = None
+    type: DocumentType | None = None
     url: str
 
     @field_validator("description", mode="before")
@@ -58,8 +59,6 @@ class ResourceFileMetadata(BaseModel):
     def validate_type_for_kind(self):
         if self.kind == ResourceKind.PDF and self.type is None:
             raise ValueError("PDF type is required")
-        if self.kind == ResourceKind.IMAGE and self.type is not None:
-            raise ValueError("Image resources do not accept a document type")
         if self.kind not in (ResourceKind.PDF, ResourceKind.IMAGE):
             raise ValueError("File upload only supports PDF or IMAGE resources")
         return self
@@ -69,6 +68,7 @@ class ResourceBaseResponse(BaseModel):
     id: UUID
     module_id: UUID
     kind: ResourceKind
+    category: DocumentType | None
     title: str
     description: str | None
     source: DocumentSource
@@ -125,6 +125,7 @@ class PendingResourceState(BaseModel):
     my_vote: VoteValue | None
     can_vote: bool
     can_approve: bool
+    can_delete: bool
     full_resource_access: bool
 
 
@@ -153,6 +154,40 @@ PendingResourceResponse = Annotated[
 
 class PendingResourceFeedResponse(BaseModel):
     items: list[PendingResourceResponse]
+    next_cursor: UUID | None = None
+
+
+class MyResourceState(BaseModel):
+    module_slug: str
+    module_name: str
+    can_delete: bool
+
+
+class MyPdfResourceResponse(PdfResourceResponse, MyResourceState):
+    pass
+
+
+class MyImageResourceResponse(ImageResourceResponse, MyResourceState):
+    pass
+
+
+class MyYoutubeResourceResponse(YoutubeResourceResponse, MyResourceState):
+    pass
+
+
+class MyLinkResourceResponse(LinkResourceResponse, MyResourceState):
+    pass
+
+
+MyResourceResponse = Annotated[
+    MyPdfResourceResponse | MyImageResourceResponse
+    | MyYoutubeResourceResponse | MyLinkResourceResponse,
+    Field(discriminator="kind"),
+]
+
+
+class MyResourceFeedResponse(BaseModel):
+    items: list[MyResourceResponse]
     next_cursor: UUID | None = None
 
 

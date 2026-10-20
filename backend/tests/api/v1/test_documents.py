@@ -193,8 +193,7 @@ def test_member_upload(client, db_session):
     
     # 11. Client cannot manipulate status through the request body
     resp3 = _upload(client, token, community.slug, module.slug, extra_data={"status": "APPROVED"})
-    assert resp3.status_code == 201
-    assert resp3.json()["status"] == "PENDING"
+    assert resp3.status_code == 422
 
 def test_delegate_upload(client, db_session):
     community = _create_community(db_session, "irm")
@@ -213,16 +212,25 @@ def test_delegate_upload(client, db_session):
     assert resp.json()["source"] == "OFFICIAL"
     assert resp.json()["status"] == "APPROVED"
     
-    # 4. DELEGATE explicit STUDENT → STUDENT + PENDING.
+    # Current Delegate publishes STUDENT without relabeling its source.
     resp2 = _upload(client, token, community.slug, module.slug, extra_data={"source": "STUDENT"})
     assert resp2.status_code == 201
     assert resp2.json()["source"] == "STUDENT"
-    assert resp2.json()["status"] == "PENDING"
+    assert resp2.json()["status"] == "APPROVED"
+    assert resp2.json()["type"] == "COURSE"
+
+    image = _upload(client, token, community.slug, module.slug, file_name="diagram.png",
+                    content_type="image/png", extra_data={"source": "STUDENT"})
+    assert image.status_code == 201
+    assert image.json()["source"] == "STUDENT"
+    assert image.json()["status"] == "APPROVED"
+    assert image.json()["type"] == "COURSE"
     
-    # 9. Client-supplied status cannot override backend (OFFICIAL should not become PENDING)
+    # Client-supplied authority or status is rejected on the legacy route too.
     resp3 = _upload(client, token, community.slug, module.slug, extra_data={"source": "OFFICIAL", "status": "PENDING"})
-    assert resp3.status_code == 201
-    assert resp3.json()["status"] == "APPROVED"
+    assert resp3.status_code == 422
+    assert _upload(client, token, community.slug, module.slug,
+                   extra_data={"source": "STUDENT", "role": "DELEGATE"}).status_code == 422
 
 def test_moderator_upload(client, db_session):
     community = _create_community(db_session, "irm2")

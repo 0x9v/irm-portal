@@ -8,7 +8,7 @@ const baseDocuments = [
 ];
 const baseResources = baseDocuments.map(doc => ({
   id: doc.id, module_id: doc.module_id, kind: 'PDF', title: doc.title, description: null,
-  document_type: doc.type, source: doc.source, status: doc.status,
+  category: doc.type, document_type: doc.type, source: doc.source, status: doc.status,
   created_at: doc.created_at, updated_at: doc.updated_at,
 }));
 
@@ -29,6 +29,7 @@ async function openModule(page: import('@playwright/test').Page) {
 }
 
 test('search submits encoded title and exact filters; clear restores the unfiltered list', async ({ page }) => {
+  await page.route('**/api/**', route => route.abort());
   const requested: URL[] = [];
   await page.route(`${api}/communities/irm/modules/${moduleSlug}/resources**`, route => {
     requested.push(new URL(route.request().url()));
@@ -42,16 +43,17 @@ test('search submits encoded title and exact filters; clear restores the unfilte
   await page.getByRole('searchbox', { name: 'Search resources' }).fill('  50%_ off  ');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect.poll(() => requested.some(url => url.searchParams.get('q') === '50%_ off')).toBe(true);
-  await page.getByLabel('Resource kind').selectOption('PDF');
-  await page.getByLabel('Type').selectOption('TD');
-  await expect.poll(() => requested.some(url => url.searchParams.get('type') === 'TD' && url.searchParams.get('q') === '50%_ off')).toBe(true);
+  await page.getByLabel('Format').selectOption('PDF');
+  await page.getByLabel('Catégorie').selectOption('TD');
+  await expect.poll(() => requested.some(url => url.searchParams.get('category') === 'TD' && url.searchParams.get('q') === '50%_ off')).toBe(true);
   await page.getByLabel('Source').selectOption('STUDENT');
-  await expect.poll(() => requested.some(url => url.searchParams.get('source') === 'STUDENT' && url.searchParams.get('type') === 'TD')).toBe(true);
+  await expect.poll(() => requested.some(url => url.searchParams.get('source') === 'STUDENT' && url.searchParams.get('category') === 'TD')).toBe(true);
   await page.getByRole('button', { name: 'Clear filters' }).click();
   await expect.poll(() => requested.at(-1)?.searchParams.get('kind')).toBe(null);
 });
 
 test('filtered empty, ordinary empty, and retry error states remain distinct', async ({ page }) => {
+  await page.route('**/api/**', route => route.abort());
   let mode: 'normal' | 'empty' = 'normal';
   let failNext = false;
   await page.route(`${api}/communities/irm/modules/${moduleSlug}/resources**`, async route => {
@@ -67,8 +69,8 @@ test('filtered empty, ordinary empty, and retry error states remain distinct', a
   });
   await openModule(page);
   mode = 'empty';
-  await page.getByLabel('Resource kind').selectOption('PDF');
-  await page.getByLabel('Type').selectOption('EXAM');
+  await page.getByLabel('Format').selectOption('PDF');
+  await page.getByLabel('Catégorie').selectOption('EXAM');
   await expect(page.getByText('No resources match these filters.')).toBeVisible();
   await page.getByRole('button', { name: 'Clear filters' }).last().click();
   await expect(page.getByText('No resources found for this module yet.')).toBeVisible();
@@ -83,6 +85,7 @@ test('filtered empty, ordinary empty, and retry error states remain distinct', a
 });
 
 test('a delayed earlier search cannot replace a newer result', async ({ page }) => {
+  await page.route('**/api/**', route => route.abort());
   let releaseSlow!: () => void;
   let slowStarted = false;
   const slowGate = new Promise<void>(resolve => { releaseSlow = resolve; });
@@ -112,6 +115,7 @@ test('a delayed earlier search cannot replace a newer result', async ({ page }) 
 });
 
 test('controls are keyboard reachable and fit a 320px light and dark viewport', async ({ page }) => {
+  await page.route('**/api/**', route => route.abort());
   await page.route(`${api}/communities/irm/modules/${moduleSlug}/resources**`, route => route.fulfill({ status: 200, json: { items: baseResources, next_cursor: null } }));
   await openModule(page);
   await page.setViewportSize({ width: 320, height: 760 });

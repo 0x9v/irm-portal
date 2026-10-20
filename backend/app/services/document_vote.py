@@ -26,6 +26,8 @@ def check_full_document_access(
     """
     if not user:
         return False
+    if doc.removed_at is not None:
+        return False
         
     if doc.status == DocumentStatus.APPROVED:
         return True
@@ -73,7 +75,8 @@ def _evaluate_document_votes(db: Session, doc: Document) -> bool:
     Returns True if the document's status changed.
     Assumes the caller holds a lock on the document row.
     """
-    if doc.status != DocumentStatus.PENDING or doc.source != DocumentSource.STUDENT:
+    if (doc.removed_at is not None or doc.status != DocumentStatus.PENDING
+            or doc.source != DocumentSource.STUDENT):
         return False
         
     if doc.vote_threshold_snapshot is None:
@@ -147,8 +150,8 @@ def cast_document_vote(
             detail="Document not found."
         )
 
-    # 1. Look up document and acquire lock if supported
-    doc = db.query(Document).filter(Document.id == doc_uuid).with_for_update().populate_existing().first()
+    # Resolve ownership before locks; use User → Membership → Document everywhere.
+    doc = db.query(Document).filter(Document.id == doc_uuid).first()
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -160,17 +163,22 @@ def cast_document_vote(
     if not module:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found.")
         
+    if db.query(User.id).filter(User.id == user.id).with_for_update().first() is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     membership = db.query(Membership).filter(
         Membership.user_id == user.id,
         Membership.community_id == module.community_id,
-        Membership.status == MembershipStatus.ACTIVE
-    ).first()
+    ).with_for_update().populate_existing().first()
     
-    if not membership:
+    if not membership or membership.status != MembershipStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Active membership in the owning community is required."
         )
+
+    doc = db.query(Document).filter(Document.id == doc_uuid).with_for_update().populate_existing().first()
+    if doc is None or doc.module_id != module.id or doc.removed_at is not None:
+        raise HTTPException(status_code=404, detail="Document not found.")
 
     # 3. Check document eligibility
     if (doc.status == DocumentStatus.APPROVED or doc.status == DocumentStatus.REJECTED

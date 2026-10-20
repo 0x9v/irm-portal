@@ -33,6 +33,7 @@ def get_readable_approved_document(
             Community.slug == community_slug,
             Document.id == document_uuid,
             Document.status == DocumentStatus.APPROVED,
+            Document.removed_at.is_(None),
             Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
             Document.storage_path.is_not(None),
             Document.storage_path.is_not(None),
@@ -104,6 +105,7 @@ def list_recent_documents(
             DocumentReading.user_id == user_id,
             Community.slug == community_slug,
             Document.status == DocumentStatus.APPROVED,
+            Document.removed_at.is_(None),
         )
     )
     if after is not None:
@@ -117,6 +119,7 @@ def list_recent_documents(
                 DocumentReading.user_id == user_id,
                 Community.slug == community_slug,
                 Document.status == DocumentStatus.APPROVED,
+                Document.removed_at.is_(None),
                 Document.resource_kind.in_((ResourceKind.PDF, ResourceKind.IMAGE)),
                 Document.storage_path.is_not(None),
             )

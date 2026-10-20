@@ -19,14 +19,14 @@ import { ContentLoading, ContentEmpty } from "@/components/ContentState";
 import { buttonStyles } from "@/components/ui/Button";
 import {
   DOCUMENT_SOURCES,
-  DOCUMENT_TYPES,
+  DOCUMENT_CATEGORY_OPTIONS,
   documentSourceLabel,
   documentTypeLabel,
   type DocumentReturnContext,
 } from "@/lib/documentPresentation";
 import {
   RESOURCE_KINDS, readResourceUrl, resourceModuleHref, resourceQuery, validFeed,
-  safeExternalUrl, type ResourceItem, type ResourceFilters,
+  safeExternalUrl, resourceCategory, type ResourceItem, type ResourceFilters,
 } from "@/lib/moduleResources";
 
 export type DocumentResponse = {
@@ -59,7 +59,7 @@ function ModuleDetailContent() {
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [queryDraft, setQueryDraft] = useState("");
   const [titleQuery, setTitleQuery] = useState("");
-  const [selectedType, setSelectedType] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<ResourceFilters["category"]>("");
   const [selectedKind, setSelectedKind] = useState<ResourceFilters["kind"]>("");
   const [selectedSource, setSelectedSource] = useState("");
   const [urlReady, setUrlReady] = useState(false);
@@ -80,7 +80,7 @@ function ModuleDetailContent() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQueryDraft(filters.q);
     setTitleQuery(filters.q);
-    setSelectedType(filters.type);
+    setSelectedCategory(filters.category);
     setSelectedKind(filters.kind);
     setSelectedSource(filters.source);
     setReturnContext(context);
@@ -131,8 +131,8 @@ function ModuleDetailContent() {
     const requestId = ++documentRequestId.current;
     moreController.current?.abort();
     moreLock.current = false;
-    const filters: ResourceFilters = { q: titleQuery, kind: selectedKind, source: selectedSource as ResourceFilters["source"], type: selectedType };
-    const scope = `${user.id}:irm:${moduleSlug}:${mod.id}:${resourceQuery(filters)}:${selectedType}`;
+    const filters: ResourceFilters = { q: titleQuery, category: selectedCategory, kind: selectedKind, source: selectedSource as ResourceFilters["source"] };
+    const scope = `${user.id}:irm:${moduleSlug}:${mod.id}:${resourceQuery(filters)}`;
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDocumentsLoading(true);
@@ -142,22 +142,10 @@ function ModuleDetailContent() {
     setNextCursor(null);
     setFeedScope("");
     const base = `/api/v1/communities/irm/modules/${encodeURIComponent(moduleSlug)}`;
-    const request = selectedType
-      ? fetchApi<DocumentResponse[]>(`${base}/documents?${new URLSearchParams({
-          ...(titleQuery ? { q: titleQuery } : {}), type: selectedType,
-          ...(selectedSource ? { source: selectedSource } : {}),
-        })}`, { signal: controller.signal }).then(data => {
-          if (!Array.isArray(data)) throw new Error("Invalid document list");
-          return { items: data.filter(doc => doc.status === "APPROVED").map(doc => ({
-            id: doc.id, module_id: doc.module_id, kind: "PDF" as const, title: doc.title,
-            description: null, source: doc.source as "STUDENT" | "OFFICIAL", status: "APPROVED" as const,
-            created_at: doc.created_at, updated_at: doc.updated_at, document_type: doc.type,
-          })), next_cursor: null };
-        })
-      : fetchApi<unknown>(`${base}/resources?${resourceQuery(filters)}`, { signal: controller.signal }).then(data => {
-          if (!validFeed(data, mod.id)) throw new Error("Invalid resource feed");
-          return data;
-        });
+    const request = fetchApi<unknown>(`${base}/resources?${resourceQuery(filters)}`, { signal: controller.signal }).then(data => {
+      if (!validFeed(data, mod.id)) throw new Error("Invalid resource feed");
+      return data;
+    });
     request.then((data) => {
       if (!controller.signal.aborted && requestId === documentRequestId.current) {
         setResources(data.items);
@@ -173,13 +161,13 @@ function ModuleDetailContent() {
     });
 
     return () => { controller.abort(); moreController.current?.abort(); };
-  }, [moduleSlug, mod, titleQuery, selectedType, selectedKind, selectedSource, retryVersion, urlReady, user, authLoading]);
+  }, [moduleSlug, mod, titleQuery, selectedCategory, selectedKind, selectedSource, retryVersion, urlReady, user, authLoading]);
 
-  const filters: ResourceFilters = { q: titleQuery, kind: selectedKind, source: selectedSource as ResourceFilters["source"], type: selectedType };
-  const currentFeedScope = mod && user ? `${user.id}:irm:${moduleSlug}:${mod.id}:${resourceQuery(filters)}:${selectedType}` : "";
+  const filters: ResourceFilters = { q: titleQuery, category: selectedCategory, kind: selectedKind, source: selectedSource as ResourceFilters["source"] };
+  const currentFeedScope = mod && user ? `${user.id}:irm:${moduleSlug}:${mod.id}:${resourceQuery(filters)}` : "";
 
   const loadMore = async () => {
-    if (!mod || !user || !nextCursor || selectedType || moreLock.current || feedScope !== currentFeedScope) return;
+    if (!mod || !user || !nextCursor || moreLock.current || feedScope !== currentFeedScope) return;
     moreLock.current = true;
     const controller = new AbortController();
     moreController.current = controller;
@@ -195,8 +183,11 @@ function ModuleDetailContent() {
         return [...current, ...data.items.filter(item => !known.has(item.id))];
       });
       setNextCursor(data.next_cursor);
-    } catch {
-      if (!controller.signal.aborted && requestId === documentRequestId.current) setMoreError("More resources could not be loaded. Try again.");
+    } catch (err) {
+      if (!controller.signal.aborted && requestId === documentRequestId.current) {
+        if (err instanceof ApiError && err.status === 404) setRetryVersion(version => version + 1);
+        else setMoreError("More resources could not be loaded. Try again.");
+      }
     } finally {
       if (!controller.signal.aborted && requestId === documentRequestId.current) setLoadingMore(false);
       if (moreController.current === controller) moreLock.current = false;
@@ -205,6 +196,13 @@ function ModuleDetailContent() {
 
   const writeFilterUrl = (filters: ResourceFilters) => {
     const href = resourceModuleHref(moduleSlug, filters, returnContext);
+    if (href === `${window.location.pathname}${window.location.search}`) return;
+    documentRequestId.current++;
+    moreController.current?.abort();
+    moreLock.current = false;
+    setResources([]);
+    setNextCursor(null);
+    setFeedScope("");
     window.history.pushState(null, "", href);
   };
 
@@ -213,36 +211,34 @@ function ModuleDetailContent() {
     const q = readResourceUrl(new URLSearchParams({ q: queryDraft }).toString()).filters.q;
     setQueryDraft(q);
     setTitleQuery(q);
-    writeFilterUrl({ q, type: selectedType, kind: selectedKind, source: selectedSource as ResourceFilters["source"] });
+    writeFilterUrl({ q, category: selectedCategory, kind: selectedKind, source: selectedSource as ResourceFilters["source"] });
   };
 
   const clearFilters = () => {
     setQueryDraft("");
     setTitleQuery("");
-    setSelectedType("");
+    setSelectedCategory("");
     setSelectedKind("");
     setSelectedSource("");
-    writeFilterUrl({ q: "", type: "", kind: "", source: "" });
+    writeFilterUrl({ q: "", category: "", kind: "", source: "" });
   };
 
-  const setTypeFilter = (type: string) => {
-    setSelectedType(type);
-    if (type) setSelectedKind("PDF");
-    writeFilterUrl({ q: titleQuery, type, kind: type ? "PDF" : selectedKind, source: selectedSource as ResourceFilters["source"] });
+  const setCategoryFilter = (category: ResourceFilters["category"]) => {
+    setSelectedCategory(category);
+    writeFilterUrl({ q: titleQuery, category, kind: selectedKind, source: selectedSource as ResourceFilters["source"] });
   };
 
   const setKindFilter = (kind: ResourceFilters["kind"]) => {
     setSelectedKind(kind);
-    setSelectedType("");
-    writeFilterUrl({ q: titleQuery, type: "", kind, source: selectedSource as ResourceFilters["source"] });
+    writeFilterUrl({ q: titleQuery, category: selectedCategory, kind, source: selectedSource as ResourceFilters["source"] });
   };
 
   const setSourceFilter = (source: string) => {
     setSelectedSource(source);
-    writeFilterUrl({ q: titleQuery, type: selectedType, kind: selectedKind, source: source as ResourceFilters["source"] });
+    writeFilterUrl({ q: titleQuery, category: selectedCategory, kind: selectedKind, source: source as ResourceFilters["source"] });
   };
 
-  const filtersActive = Boolean(titleQuery || selectedType || selectedSource || selectedKind);
+  const filtersActive = Boolean(titleQuery || selectedCategory || selectedSource || selectedKind);
 
   const isActiveMember = !!user && !authLoading && !isRefreshing && !isLoggingOut && !membershipError && !authError && membership?.status === "ACTIVE";
 
@@ -328,6 +324,20 @@ function ModuleDetailContent() {
           <div>
             <div>
               <form onSubmit={submitSearch} className={styles.filters}>
+                <div>
+                  <label htmlFor="resource-category" className="block text-sm font-medium text-text mb-1">Catégorie</label>
+                  <select id="resource-category" value={selectedCategory} onChange={(event) => setCategoryFilter(event.target.value as ResourceFilters["category"])} className="w-full min-h-[44px] rounded-control border border-control-border bg-surface px-3 text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+                    <option value="">Tous</option>
+                    {DOCUMENT_CATEGORY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="resource-kind" className="block text-sm font-medium text-text mb-1">Format</label>
+                  <select id="resource-kind" value={selectedKind} onChange={(event) => setKindFilter(event.target.value as ResourceFilters["kind"])} className="w-full min-h-[44px] rounded-control border border-control-border bg-surface px-3 text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+                    <option value="">Tous</option>
+                    {RESOURCE_KINDS.map(kind => <option key={kind} value={kind}>{kind === "LINK" ? "Lien" : kind === "IMAGE" ? "Image" : kind === "PDF" ? "PDF" : "YouTube"}</option>)}
+                  </select>
+                </div>
                 <div className="min-w-0">
                   <label htmlFor="document-search" className="block text-sm font-medium text-text mb-1">Search resources</label>
                   <input
@@ -340,20 +350,6 @@ function ModuleDetailContent() {
                     className="w-full min-h-[44px] rounded-control border border-control-border bg-surface px-3 text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                   />
                 </div>
-                <div>
-                  <label htmlFor="resource-kind" className="block text-sm font-medium text-text mb-1">Resource kind</label>
-                  <select id="resource-kind" value={selectedKind} onChange={(event) => setKindFilter(event.target.value as ResourceFilters["kind"])} className="w-full min-h-[44px] rounded-control border border-control-border bg-surface px-3 text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-                    <option value="">All kinds</option>
-                    {RESOURCE_KINDS.map(kind => <option key={kind} value={kind}>{kind === "PDF" ? "Document" : kind === "YOUTUBE" ? "YouTube" : kind === "LINK" ? "Useful link" : "Image"}</option>)}
-                  </select>
-                </div>
-                {selectedKind === "PDF" && <div>
-                  <label htmlFor="document-type" className="block text-sm font-medium text-text mb-1">Type</label>
-                  <select id="document-type" value={selectedType} onChange={(event) => setTypeFilter(event.target.value)} className="w-full min-h-[44px] rounded-control border border-control-border bg-surface px-3 text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-                    <option value="">All types</option>
-                    {DOCUMENT_TYPES.map((value) => <option key={value} value={value}>{documentTypeLabel(value)}</option>)}
-                  </select>
-                </div>}
                 <div>
                   <label htmlFor="document-source" className="block text-sm font-medium text-text mb-1">Source</label>
                   <select id="document-source" value={selectedSource} onChange={(event) => setSourceFilter(event.target.value)} className="w-full min-h-[44px] rounded-control border border-control-border bg-surface px-3 text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
@@ -375,24 +371,25 @@ function ModuleDetailContent() {
             ) : documentsLoading || feedScope !== currentFeedScope ? (
               <ContentLoading label="Loading resources…" kind="document" count={2} />
             ) : resources.length === 0 && filtersActive ? (
-              <ContentEmpty title="No resources match these filters." description="Try another title, kind, type or source."
+              <ContentEmpty title="No resources match these filters." description="Try another title, category, format or source."
                 action={<button type="button" onClick={clearFilters} className={buttonStyles("quiet", "min-h-[44px]")}>Clear filters</button>} />
             ) : resources.length === 0 ? (
               <ContentEmpty title="No resources found for this module yet." description="Approved resources will appear here when they are available." />
             ) : (
               <div className={styles.rows}>
                 {resources.map((item) => {
-                  const readerHref = `/communities/irm/modules/${encodeURIComponent(mod.slug)}/documents/${encodeURIComponent(item.id)}?${new URLSearchParams({ from: returnContext, ...(titleQuery ? { q: titleQuery } : {}), ...(selectedKind ? { kind: selectedKind } : {}), ...(selectedType ? { type: selectedType } : {}), ...(selectedSource ? { source: selectedSource } : {}) }).toString()}`;
+                  const category = resourceCategory(item);
+                  const readerHref = `/communities/irm/modules/${encodeURIComponent(mod.slug)}/documents/${encodeURIComponent(item.id)}?${new URLSearchParams({ from: returnContext, ...(titleQuery ? { q: titleQuery } : {}), ...(selectedCategory ? { category: selectedCategory } : {}), ...(selectedKind ? { kind: selectedKind } : {}), ...(selectedSource ? { source: selectedSource } : {}) }).toString()}`;
                   const outbound = safeExternalUrl(item);
                   const hostname = outbound ? new URL(outbound).hostname : "";
                   return <DocumentRow key={item.id} title={item.title} openHref={item.kind === "PDF" ? readerHref : undefined}
                     context={<>
-                      <span className="text-xs text-text-subtle">{item.kind === "PDF" ? "Document" : item.kind === "IMAGE" ? "Image" : item.kind === "YOUTUBE" ? "YouTube" : "Useful link"}</span>
+                      <span className="text-xs text-text-subtle">{item.kind === "PDF" ? "PDF" : item.kind === "IMAGE" ? "Image" : item.kind === "YOUTUBE" ? "YouTube" : "Lien"}</span>
                       {item.description && <p className="mt-1 break-words">{item.description}</p>}
                       {item.kind === "IMAGE" && <ResourceImage key={`${user.id}:${item.id}:${item.preview_url}`} item={item} />}
                     </>}
                     metadata={<>
-                      {item.kind === "PDF" && <span>Type: {documentTypeLabel(item.document_type ?? "")}</span>}
+                      <span>Catégorie: {category ? documentTypeLabel(category) : "Non classé"}</span>
                       <span>Source: {documentSourceLabel(item.source)}</span>
                       <span>Added: <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleDateString()}</time></span>
                     </>}
@@ -406,7 +403,7 @@ function ModuleDetailContent() {
                     </>}
                   />;
                 })}
-                {nextCursor && !selectedType && <button type="button" onClick={loadMore} disabled={loadingMore} aria-busy={loadingMore}
+                {nextCursor && <button type="button" onClick={loadMore} disabled={loadingMore} aria-busy={loadingMore}
                   className={buttonStyles("secondary", "min-h-[44px] self-start")}>{loadingMore ? "Loading more…" : "Load more resources"}</button>}
                 {moreError && <FeedbackMessage type="error" message={moreError} onRetry={loadMore} retryLabel="Retry loading more" />}
               </div>

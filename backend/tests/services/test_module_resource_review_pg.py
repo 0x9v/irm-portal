@@ -1,13 +1,14 @@
 """Lease-guarded PostgreSQL tests for the shared resource review decision."""
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from threading import Barrier, Event
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import event, inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from acceptance.isolation import disposable_database
@@ -18,8 +19,10 @@ from app.models.management_event import ManagementEvent
 from app.models.membership import Membership, MembershipRole, MembershipStatus
 from app.models.module import Module
 from app.models.user import User
+from app.core.sessions import create_session
+from app.models.session import Session as BrowserSession
 from app.services.document_vote import check_full_document_access
-from app.services.module_resource import approve_pending_resource, cast_resource_vote
+from app.services.module_resource import approve_pending_resource, cast_resource_vote, remove_resource
 
 
 def _seed(factory, *, kind=ResourceKind.LINK, threshold=1):
@@ -190,13 +193,155 @@ def test_migrated_description_constraint_matches_metadata_semantics():
         ids = _seed(owned.factory)
         checks = {item["name"]: item["sqltext"] for item in inspect(owned.engine).get_check_constraints("documents")}
         assert "ck_document_description_length" in checks
-        for invalid in ("", " ", " leading", "trailing ", "x" * 2001):
-            with pytest.raises(IntegrityError):
+        insert = text("""
+            INSERT INTO documents (id, module_id, uploader_id, title, description,
+                resource_kind, source, status, external_url, created_at, updated_at)
+            VALUES (:id, :module, :uploader, 'Description test', :description,
+                'LINK', 'OFFICIAL', 'APPROVED', 'https://example.com', now(), now())
+            RETURNING description
+        """)
+
+        def insert_description(connection, description):
+            return connection.execute(insert, dict(
+                id=uuid4(), module=ids["module"], uploader=ids["uploader"],
+                description=description,
+            )).scalar_one()
+
+        for valid in (None, "Normal text", "x" * 2000):
+            with owned.engine.begin() as connection:
+                assert insert_description(connection, valid) == valid
+
+        for invalid in ("", " ", " leading", "trailing "):
+            with pytest.raises(IntegrityError) as error:
                 with owned.engine.begin() as connection:
-                    connection.execute(text("""
-                        INSERT INTO documents (id, module_id, uploader_id, title, description,
-                            resource_kind, source, status, external_url, created_at, updated_at)
-                        VALUES (:id, :module, :uploader, 'Invalid', :description,
-                            'LINK', 'OFFICIAL', 'APPROVED', 'https://example.com', now(), now())
-                    """), dict(id=uuid4(), module=ids["module"], uploader=ids["uploader"],
-                               description=invalid))
+                    insert_description(connection, invalid)
+            assert error.value.orig.sqlstate == "23514"
+            assert error.value.orig.diag.constraint_name == "ck_document_description_length"
+
+        with pytest.raises(DataError) as error:
+            with owned.engine.begin() as connection:
+                insert_description(connection, "x" * 2001)
+        assert error.value.orig.sqlstate == "22001"
+
+
+@pytest.mark.parametrize("first", ["approval", "removal"])
+def test_approval_and_removal_serialize_on_document_row(first):
+    with disposable_database() as owned:
+        assert owned.server_identity["database"] == "irm_integration_test"
+        assert owned.server_identity["role"] == "irm_test"
+        ids = _seed(owned.factory, threshold=3)
+        held = Event()
+        release = Event()
+        attempting_lock = Event()
+
+        def pause_winner(session, *_args):
+            if session.info.get("d3_winner") and not held.is_set():
+                held.set()
+                assert release.wait(timeout=10)
+
+        def mark_loser_lock(state):
+            if state.session.info.get("d3_loser") and state.is_select:
+                sql = str(state.statement).upper()
+                if "DOCUMENTS" in sql and "FOR UPDATE" in sql:
+                    attempting_lock.set()
+
+        event.listen(Session, "before_flush", pause_winner)
+        event.listen(Session, "do_orm_execute", mark_loser_lock)
+        try:
+            def winner():
+                with owned.factory() as db:
+                    db.info["d3_winner"] = True
+                    if first == "approval":
+                        approve_pending_resource(db, "review", ids["resource"], ids["staff"])
+                    else:
+                        remove_resource(db, "review", ids["resource"], ids["uploader"])
+
+            def loser():
+                with owned.factory() as db:
+                    db.info["d3_loser"] = True
+                    try:
+                        if first == "approval":
+                            remove_resource(db, "review", ids["resource"], ids["uploader"])
+                        else:
+                            cast_resource_vote(db, "review", ids["resource"], ids["voter"], VoteValue.YES)
+                    except HTTPException as error:
+                        return error.status_code
+                    return 200
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                winning = pool.submit(winner)
+                assert held.wait(timeout=10)
+                losing = pool.submit(loser)
+                assert attempting_lock.wait(timeout=10)
+                assert not losing.done()
+                release.set()
+                winning.result(timeout=20)
+                assert losing.result(timeout=20) == (409 if first == "approval" else 404)
+        finally:
+            release.set()
+            event.remove(Session, "before_flush", pause_winner)
+            event.remove(Session, "do_orm_execute", mark_loser_lock)
+
+        with owned.factory() as db:
+            row = db.get(Document, ids["resource"])
+            assert (row.status, row.removed_at is not None) == (
+                (DocumentStatus.APPROVED, False) if first == "approval"
+                else (DocumentStatus.PENDING, True))
+            assert db.query(DocumentVote).filter_by(document_id=row.id).count() == 0
+            assert db.query(ManagementEvent).filter_by(
+                target_id=row.id, action="remove").count() == (0 if first == "approval" else 1)
+
+
+def test_removal_authority_revocation_under_user_membership_locks():
+    with disposable_database() as owned:
+        ids = _seed(owned.factory)
+        started = Event()
+        with owned.factory() as manager:
+            manager.query(User.id).filter(User.id == ids["uploader"]).with_for_update().first()
+            membership = manager.query(Membership).filter_by(
+                user_id=ids["uploader"], community_id=ids["community"],
+            ).with_for_update().one()
+
+            def attempt():
+                with owned.factory() as db:
+                    started.set()
+                    with pytest.raises(HTTPException) as error:
+                        remove_resource(db, "review", ids["resource"], ids["uploader"])
+                    return error.value.status_code
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(attempt)
+                assert started.wait(timeout=5)
+                membership.status = MembershipStatus.REMOVED
+                manager.commit()
+                assert future.result(timeout=20) == 403
+        with owned.factory() as db:
+            assert db.get(Document, ids["resource"]).removed_at is None
+
+
+def test_removal_rechecks_session_after_user_lock():
+    with disposable_database() as owned:
+        ids = _seed(owned.factory)
+        with owned.factory() as db:
+            token, browser_session = create_session(db, ids["uploader"], timedelta(days=1))
+            session_id = browser_session.id
+        started = Event()
+        with owned.factory() as manager:
+            manager.query(User.id).filter(User.id == ids["uploader"]).with_for_update().first()
+            session = manager.query(BrowserSession).filter_by(id=session_id).with_for_update().one()
+
+            def attempt():
+                with owned.factory() as db:
+                    started.set()
+                    with pytest.raises(HTTPException) as error:
+                        remove_resource(db, "review", ids["resource"], ids["uploader"], token)
+                    return error.value.status_code
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(attempt)
+                assert started.wait(timeout=5)
+                session.is_revoked = True
+                manager.commit()
+                assert future.result(timeout=20) == 401
+        with owned.factory() as db:
+            assert db.get(Document, ids["resource"]).removed_at is None

@@ -20,6 +20,7 @@ def approved_document_query(community_slug: str, document_id: UUID):
             Community.slug == community_slug,
             Document.id == document_id,
             Document.status == DocumentStatus.APPROVED,
+            Document.removed_at.is_(None),
             Document.storage_path.is_not(None),
         )
     )
@@ -36,6 +37,7 @@ def is_saved(db: Session, user_id: UUID, community_slug: str, document_id: UUID)
             Community.slug == community_slug,
             Document.id == document_id,
             Document.status == DocumentStatus.APPROVED,
+            Document.removed_at.is_(None),
             Document.storage_path.is_not(None),
         )
     ).first() is not None
@@ -62,7 +64,7 @@ def remove_saved_document(db: Session, user_id: UUID, community_slug: str, docum
             select(Document.id)
             .join(Module, Module.id == Document.module_id)
             .join(Community, Community.id == Module.community_id)
-            .where(Community.slug == community_slug)
+            .where(Community.slug == community_slug, Document.removed_at.is_(None))
         ),
     ).delete(synchronize_session=False)
     db.commit()
@@ -78,6 +80,7 @@ def list_saved_documents(db: Session, *, user_id: UUID, community_slug: str, lim
             SavedDocument.user_id == user_id,
             Community.slug == community_slug,
             Document.status == DocumentStatus.APPROVED,
+            Document.removed_at.is_(None),
             Document.storage_path.is_not(None),
         )
     )
@@ -92,6 +95,7 @@ def list_saved_documents(db: Session, *, user_id: UUID, community_slug: str, lim
                 SavedDocument.user_id == user_id,
                 Community.slug == community_slug,
                 Document.status == DocumentStatus.APPROVED,
+            Document.removed_at.is_(None),
                 Document.storage_path.is_not(None),
             )
         ).first()
